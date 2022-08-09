@@ -26,27 +26,41 @@ var appEnv string
 var flags struct {
 	port    int
 	verbose bool
+	quiet   bool
 }
 
 var flagsName = struct {
 	port, portShort       string
 	verbose, verboseShort string
+	quiet, quietShort     string
 }{
 	"port", "p",
 	"verbose", "v",
+	"quiet", "q",
 }
 
-var print func(s string)
-var printf func(s string, args ...interface{})
-
-func logNoop(s string)                       {}
-func logNoopf(s string, args ...interface{}) {}
-
-func logOut(s string) {
-	log.Println("[paste-server] " + s)
+func print(level int, s string) {
+	if flags.quiet {
+		return
+	}
+	if level == 1 {
+		log.Println(s)
+	}
+	if level == 2 && flags.verbose {
+		log.Println(s)
+	}
 }
-func logOutf(s string, args ...interface{}) {
-	log.Printf("[paste-sever] "+s, args...)
+
+func printf(level int, s string, args ...interface{}) {
+	if flags.quiet {
+		return
+	}
+	if level == 1 {
+		log.Printf(s, args...)
+	}
+	if level == 2 && flags.verbose {
+		log.Printf(s, args...)
+	}
 }
 
 var rootCmd = &cobra.Command{
@@ -54,12 +68,6 @@ var rootCmd = &cobra.Command{
 	Short: "Start a paste-server instance locally",
 	Long:  `Start a paste-server instance to allow for CRUD operations for ephemeral pastes on a given port`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		print = logNoop
-		printf = logNoopf
-		if flags.verbose {
-			print = logOut
-			printf = logOutf
-		}
 		return run()
 	},
 }
@@ -71,12 +79,13 @@ func startHttpServer(wg *sync.WaitGroup) *http.Server {
 	go func() {
 		defer wg.Done()
 
-		printf("Starting server on port: %d", flags.port)
+		printf(1, "Starting server on port: %d", flags.port)
 		if appEnv == "development" {
 			if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-				log.Fatalf("[paste-server]: %v", err)
+				log.Fatalf("ListenAndServe(): %v", err)
 			}
 		}
+		print(1, "Shutting down server")
 	}()
 
 	return srv
@@ -91,7 +100,6 @@ func run() error {
 	signal.Notify(signalChan, os.Interrupt)
 	go func() {
 		<-signalChan
-		print("Shutting down server")
 		if err := srv.Shutdown(context.Background()); err != nil {
 			panic(err)
 		}
@@ -116,7 +124,14 @@ func main() {
 		&flags.verbose,
 		flagsName.verbose,
 		flagsName.verboseShort,
-		false, "log verbose output",
+		true, "log verbose output",
+	)
+
+	rootCmd.PersistentFlags().BoolVarP(
+		&flags.quiet,
+		flagsName.quiet,
+		flagsName.quietShort,
+		false, "suppress all output",
 	)
 
 	if err := rootCmd.Execute(); err != nil {
