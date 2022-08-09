@@ -7,8 +7,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
+	"time"
 
+	"github.com/h5law/paste-server/api"
 	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
 )
@@ -22,46 +23,9 @@ func goDotEnvVariable(key string) string {
 }
 
 var appEnv string
+var mdbUri string
 
-var flags struct {
-	port    int
-	verbose bool
-	quiet   bool
-}
-
-var flagsName = struct {
-	port, portShort       string
-	verbose, verboseShort string
-	quiet, quietShort     string
-}{
-	"port", "p",
-	"verbose", "v",
-	"quiet", "q",
-}
-
-func print(level int, s string) {
-	if flags.quiet {
-		return
-	}
-	if level == 1 {
-		log.Println(s)
-	}
-	if level == 2 && flags.verbose {
-		log.Println(s)
-	}
-}
-
-func printf(level int, s string, args ...interface{}) {
-	if flags.quiet {
-		return
-	}
-	if level == 1 {
-		log.Printf(s, args...)
-	}
-	if level == 2 && flags.verbose {
-		log.Printf(s, args...)
-	}
-}
+var Port int
 
 var rootCmd = &cobra.Command{
 	Use:   "paste-server",
@@ -72,70 +36,83 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-func startHttpServer(wg *sync.WaitGroup) *http.Server {
-	portStr := fmt.Sprintf(":%d", flags.port)
-	srv := &http.Server{Addr: portStr}
-
-	go func() {
-		defer wg.Done()
-
-		printf(1, "Starting server on port: %d", flags.port)
-		if appEnv == "development" {
-			if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-				log.Fatalf("ListenAndServe(): %v", err)
-			}
-		}
-		print(1, "Shutting down server")
-	}()
-
-	return srv
-}
-
-func run() error {
-	httpServerExitDone := &sync.WaitGroup{}
-	httpServerExitDone.Add(1)
-	srv := startHttpServer(httpServerExitDone)
-
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, os.Interrupt)
-	go func() {
-		<-signalChan
-		if err := srv.Shutdown(context.Background()); err != nil {
-			panic(err)
-		}
-	}()
-
-	httpServerExitDone.Wait()
-
-	return nil
-}
-
 func main() {
 	appEnv = goDotEnvVariable("APP_ENV")
+	mdbUri = goDotEnvVariable("MONGO_URI")
+	if mdbUri == "" {
+		log.Fatal("Unable to extract 'MONGO_URI' environment variable")
+	}
 
 	rootCmd.Flags().IntVarP(
-		&flags.port,
-		flagsName.port,
-		flagsName.portShort,
+		&Port,
+		"port",
+		"p",
 		3000, "port to run the server on",
-	)
-
-	rootCmd.PersistentFlags().BoolVarP(
-		&flags.verbose,
-		flagsName.verbose,
-		flagsName.verboseShort,
-		true, "log verbose output",
-	)
-
-	rootCmd.PersistentFlags().BoolVarP(
-		&flags.quiet,
-		flagsName.quiet,
-		flagsName.quietShort,
-		false, "suppress all output",
 	)
 
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal(err)
-		os.Exit(1)
 	}
+}
+
+func run() error {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		oscall := <-c
+		log.Printf("system call: %v\n", oscall)
+		cancel()
+	}()
+
+	if err := startServer(ctx); err != nil {
+		log.Fatalf("failed to start server: %v\n", err)
+	}
+
+	return nil
+}
+
+func startServer(ctx context.Context) (err error) {
+	portStr := fmt.Sprintf(":%d", Port)
+
+	r := api.NewServer(mdbUri)
+	defer func() {
+		r.DisconnectDB()
+	}()
+
+	srv := &http.Server{
+		Handler: r,
+		Addr:    portStr,
+	}
+
+	go func() {
+		if err = srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen error: %s\n", err)
+		}
+	}()
+
+	log.Println("paste-server started")
+
+	<-ctx.Done()
+
+	log.Println("paste-server stopped")
+
+	ctxShutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer func() {
+		cancel()
+	}()
+
+	if err = srv.Shutdown(ctxShutdown); err != nil {
+		log.Fatalf("server shutdown failed: %s\n", err)
+	}
+
+	log.Println("server exited properly")
+
+	if err == http.ErrServerClosed {
+		return nil
+	}
+
+	return err
 }
