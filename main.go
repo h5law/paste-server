@@ -80,9 +80,6 @@ func startServer(ctx context.Context) (err error) {
 	log.Println("starting server")
 
 	r := api.NewServer(mdbUri)
-	defer func() {
-		r.DisconnectDB()
-	}()
 
 	srv := &http.Server{
 		Handler: r,
@@ -105,6 +102,8 @@ func startServer(ctx context.Context) (err error) {
 	defer func() {
 		cancel()
 	}()
+
+	r.DisconnectDB()
 
 	if err = srv.Shutdown(ctxShutdown); err != nil {
 		log.Fatalf("server shutdown failed: %s\n", err)
