@@ -347,10 +347,6 @@ r.Body:
 Updates an existing Paste in the MongoDB database and returns a JSON document
 {
 	uuid:		UUID,
-	name:		String,
-	content:	String,
-	filetype:	String,
-	accessKey:  String,
 	expiresAt:	Date
 }
 */
@@ -521,8 +517,6 @@ func (s *Server) deletePaste() http.HandlerFunc {
 			http.Error(w, "Error matching and deleting document", http.StatusInternalServerError)
 			return
 		}
-
-		fmt.Fprintf(w, "Document deleted")
 	}
 }
 
