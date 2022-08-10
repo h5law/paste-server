@@ -77,6 +77,8 @@ func run() error {
 func startServer(ctx context.Context) (err error) {
 	portStr := fmt.Sprintf(":%d", Port)
 
+	log.Println("starting server")
+
 	r := api.NewServer(mdbUri)
 	defer func() {
 		r.DisconnectDB()
