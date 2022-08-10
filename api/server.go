@@ -30,7 +30,7 @@ type Server struct {
 }
 
 func (s *Server) ConnectDB(uri string) {
-	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(uri))
+	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI(uri))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func (s *Server) ConnectDB(uri string) {
 }
 
 func (s *Server) DisconnectDB() {
-	if err := s.Client.Disconnect(context.TODO()); err != nil {
+	if err := s.Client.Disconnect(context.Background()); err != nil {
 		log.Fatal("error disconnecting from database")
 	}
 	s.Client = nil
@@ -522,14 +522,7 @@ func (s *Server) deletePaste() http.HandlerFunc {
 			return
 		}
 
-		response := make(map[string]string)
-		response["info"] = "Document deleted"
-
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(response); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+		fmt.Fprintf(w, "Document deleted")
 	}
 }
 
