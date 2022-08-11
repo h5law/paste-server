@@ -9,6 +9,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"reflect"
 	"strings"
 	"time"
 
@@ -65,17 +66,17 @@ func NewServer() *Server {
 }
 
 type PasteBody struct {
-	Name      string `json:"name,omitempty"`
-	Content   string `json:"content"`
-	FileType  string `json:"filetype,omitempty"`
-	ExpiresIn int    `json:"expiresIn,omitempty"`
-	AccessKey string `json:"accessKey,omitempty"`
+	Name      string   `json:"name,omitempty"`
+	Content   []string `json:"content"`
+	FileType  string   `json:"filetype,omitempty"`
+	ExpiresIn int      `json:"expiresIn,omitempty"`
+	AccessKey string   `json:"accessKey,omitempty"`
 }
 
 type Paste struct {
 	UUID      string             `json:"uuid,omitempty" bson:"uuid,omitempty"`
 	Name      string             `json:"name,omitempty" bson:"name,omitempty"`
-	Content   string             `json:"content,omitempty" bson:"content,omitempty"`
+	Content   []string           `json:"content,omitempty" bson:"content,omitempty"`
 	FileType  string             `json:"filetype,omitempty" bson:"filetype,omitempty"`
 	ExpiresAt primitive.DateTime `json:"expiresAt,omitempty" bson:"expiresAt,omitempty"`
 	AccessKey string             `json:"accessKey,omitempty" bson:"accessKey,omitempty"`
@@ -98,7 +99,7 @@ func (p *Paste) NewPaste(src *PasteBody) error {
 		return errors.New("No paste information given")
 	}
 
-	if src.Content == "" {
+	if src.Content == nil {
 		return errors.New("Content field empty")
 	}
 	p.Content = src.Content
@@ -137,7 +138,7 @@ func (p *Paste) EditPaste(src *PasteBody) error {
 	}
 
 	// Check if any changes have been made and are valid
-	if src.Content != "" && src.Content == p.Content {
+	if src.Content != nil && reflect.DeepEqual(src.Content, p.Content) {
 		return errors.New("No changes made to content field")
 	}
 	if src.Name != "" && src.Name == p.Name {
@@ -155,7 +156,7 @@ func (p *Paste) EditPaste(src *PasteBody) error {
 	}
 
 	// Apply changes
-	if src.Content != "" {
+	if src.Content != nil {
 		p.Content = src.Content
 	}
 	if src.Name != "" {
@@ -189,7 +190,8 @@ func toBsonDoc(p *Paste) (bson.D, error) {
 	return doc, err
 }
 
-func bsonToPaste(b bson.M) (paste Paste, err error) {
+func bsonToPaste(b bson.M) (Paste, error) {
+	var paste Paste
 	doc, err := bson.Marshal(b)
 	if err != nil {
 		return paste, errors.New("Error marshalling BSON document")
@@ -230,6 +232,7 @@ func (s *Server) createPaste() http.HandlerFunc {
 			)
 		}()
 
+		// Load body into struct
 		var paste Paste
 		var body PasteBody
 		if err := decodeJSONBody(w, r, &body); err != nil {
@@ -268,6 +271,7 @@ func (s *Server) createPaste() http.HandlerFunc {
 		response["expiresAt"] = paste.ExpiresAt.Time().String()
 
 		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
 		if err := json.NewEncoder(w).Encode(response); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -363,7 +367,7 @@ func (s *Server) updatePaste() http.HandlerFunc {
 
 		uuidStr, _ := mux.Vars(r)["uuid"]
 
-		var paste Paste
+		// Load body into struct
 		var body PasteBody
 		if err := decodeJSONBody(w, r, &body); err != nil {
 			var mr *badRequest
@@ -376,27 +380,15 @@ func (s *Server) updatePaste() http.HandlerFunc {
 			return
 		}
 
-		if err := paste.EditPaste(&body); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		doc, err := toBsonDoc(&paste)
-		if err != nil {
-			log.Println(err)
-			http.Error(w, "Error converting request body to BSON document", http.StatusInternalServerError)
-		}
-
+		// Get and load current document state
 		coll := s.Client.Database(dbName).Collection(collName)
-		// Check document and provided accessKey match
 		var result bson.M
 		filter := bson.M{"uuid": uuidStr}
 		project := bson.M{
-			"_id":       0,
-			"accessKey": 1,
+			"_id": 0,
 		}
 
-		err = coll.FindOne(
+		err := coll.FindOne(
 			context.TODO(),
 			filter,
 			options.FindOne().SetProjection(project),
@@ -409,6 +401,24 @@ func (s *Server) updatePaste() http.HandlerFunc {
 			}
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
+		}
+
+		// Convert BSON result to Paste struct
+		paste, err := bsonToPaste(result)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if err := paste.EditPaste(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		doc, err := toBsonDoc(&paste)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "Error converting request body to BSON document", http.StatusInternalServerError)
 		}
 
 		// Check the sender can actually edit the paste
@@ -460,8 +470,8 @@ func (s *Server) deletePaste() http.HandlerFunc {
 		}()
 
 		uuidStr, _ := mux.Vars(r)["uuid"]
-		fmt.Println(uuidStr)
 
+		// Load body into struct
 		body := struct {
 			AccessKey string `json:"accessKey,omitempty"`
 		}{}
@@ -517,6 +527,7 @@ func (s *Server) deletePaste() http.HandlerFunc {
 			http.Error(w, "Error matching and deleting document", http.StatusInternalServerError)
 			return
 		}
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
