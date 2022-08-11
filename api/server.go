@@ -66,7 +66,6 @@ func NewServer() *Server {
 }
 
 type PasteBody struct {
-	Name      string   `json:"name,omitempty"`
 	Content   []string `json:"content"`
 	FileType  string   `json:"filetype,omitempty"`
 	ExpiresIn int      `json:"expiresIn,omitempty"`
@@ -75,7 +74,6 @@ type PasteBody struct {
 
 type Paste struct {
 	UUID      string             `json:"uuid,omitempty" bson:"uuid,omitempty"`
-	Name      string             `json:"name,omitempty" bson:"name,omitempty"`
 	Content   []string           `json:"content,omitempty" bson:"content,omitempty"`
 	FileType  string             `json:"filetype,omitempty" bson:"filetype,omitempty"`
 	ExpiresAt primitive.DateTime `json:"expiresAt,omitempty" bson:"expiresAt,omitempty"`
@@ -103,11 +101,6 @@ func (p *Paste) NewPaste(src *PasteBody) error {
 		return errors.New("Content field empty")
 	}
 	p.Content = src.Content
-
-	// Optional fields
-	if src.Name != "" {
-		p.Name = src.Name
-	}
 
 	// Default to plaintext if not set
 	p.FileType = "plaintext"
@@ -141,9 +134,6 @@ func (p *Paste) EditPaste(src *PasteBody) error {
 	if src.Content != nil && reflect.DeepEqual(src.Content, p.Content) {
 		return errors.New("No changes made to content field")
 	}
-	if src.Name != "" && src.Name == p.Name {
-		return errors.New("No changes made to name field")
-	}
 	if src.FileType != "" && src.FileType == p.FileType {
 		return errors.New("No changes made to filetype field")
 	}
@@ -158,9 +148,6 @@ func (p *Paste) EditPaste(src *PasteBody) error {
 	// Apply changes
 	if src.Content != nil {
 		p.Content = src.Content
-	}
-	if src.Name != "" {
-		p.Name = src.Name
 	}
 	if src.FileType != "" {
 		p.FileType = src.FileType
@@ -207,15 +194,13 @@ func bsonToPaste(b bson.M) (Paste, error) {
 /* POST /
 r.Body:
 	"content"   -> required
-	"name"      -> optional
 	"filetype"  -> optional
 	"expiresIn" -> optional (NUMBER OF DAYS)
 
 Creates a new Paste in the MongoDB database and returns a JSON document
 {
 	uuid:		UUID,
-	name:		String,
-	content:	String,
+	content:	[]String,
 	filetype:	String,
 	accessKey:  String,
 	expires:	Date
@@ -246,6 +231,7 @@ func (s *Server) createPaste() http.HandlerFunc {
 			return
 		}
 
+		// Create new Paste struct and convert into a BSON document
 		if err := paste.NewPaste(&body); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -284,8 +270,7 @@ func (s *Server) createPaste() http.HandlerFunc {
 Returns the Paste from the MongoDB database with the matching UUID in JSON
 {
 	uuid:		UUID,
-	name:		String,
-	content:	String,
+	content:	[]String,
 	filetype:	String,
 	accessKey:  String,
 	expires:	Date
@@ -304,6 +289,7 @@ func (s *Server) getPaste() http.HandlerFunc {
 
 		uuidStr, _ := mux.Vars(r)["uuid"]
 
+		// Fetch document matching UUID from database
 		coll := s.Client.Database(dbName).Collection(collName)
 		var result bson.M
 		filter := bson.M{"uuid": uuidStr}
@@ -341,12 +327,11 @@ func (s *Server) getPaste() http.HandlerFunc {
 
 /* PUT /{uuid}
 r.Body:
-	"accessKey"  -> required
+	"accessKey"   -> required
 	"content"	  -> optional
-	"name"        -> optional
 	"filetype"    -> optional
 	"expiresIn"   -> optional
-	^ At least one of the 4 optional fields must be updated
+	^ At least one of the 3 optional fields must be updated
 
 Updates an existing Paste in the MongoDB database and returns a JSON document
 {
@@ -410,11 +395,13 @@ func (s *Server) updatePaste() http.HandlerFunc {
 			return
 		}
 
+		// Update Paste and check for errors
 		if err := paste.EditPaste(&body); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
+		// Convert updated paste to BSON document
 		doc, err := toBsonDoc(&paste)
 		if err != nil {
 			log.Println(err)
@@ -486,8 +473,8 @@ func (s *Server) deletePaste() http.HandlerFunc {
 			return
 		}
 
-		coll := s.Client.Database(dbName).Collection(collName)
 		// Check document exists and accessKey is the same
+		coll := s.Client.Database(dbName).Collection(collName)
 		var result bson.M
 		filter := bson.M{"uuid": uuidStr}
 		project := bson.M{
