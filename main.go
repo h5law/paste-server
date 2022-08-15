@@ -27,6 +27,7 @@ var appEnv string
 var mdbUri string
 
 func main() {
+	// Get command line arguments
 	cmd.Execute()
 
 	appEnv = goDotEnvVariable("APP_ENV")
@@ -35,11 +36,13 @@ func main() {
 		log.Fatal("Unable to extract 'MONGO_URI' environment variable")
 	}
 
+	// Enable graceful shutdown on signal interrupts
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Listen for interrupt
 	go func() {
 		oscall := <-c
 		log.Printf("system call: %v\n", oscall)
@@ -65,6 +68,7 @@ func startServer(ctx context.Context) (err error) {
 		Addr:    portStr,
 	}
 
+	// Start server in go routine
 	go func() {
 		if err = srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen error: %s\n", err)
@@ -79,10 +83,12 @@ func startServer(ctx context.Context) (err error) {
 		r.DisconnectDB()
 	}()
 
+	// Context has been cancelled - stop everything
 	<-ctx.Done()
 
 	log.Println("paste-server stopped")
 
+	// Create context and shutdown server
 	ctxShutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer func() {
 		cancel()
