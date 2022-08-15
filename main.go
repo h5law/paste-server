@@ -10,8 +10,9 @@ import (
 	"time"
 
 	"github.com/h5law/paste-server/api"
+	"github.com/h5law/paste-server/cmd"
 	"github.com/joho/godotenv"
-	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // Load environment varaibles
@@ -25,37 +26,15 @@ func goDotEnvVariable(key string) string {
 var appEnv string
 var mdbUri string
 
-var Port int
-
-var rootCmd = &cobra.Command{
-	Use:   "paste-server",
-	Short: "Start a paste-server instance locally",
-	Long:  `Start a paste-server instance to allow for CRUD operations for ephemeral pastes on a given port`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return run()
-	},
-}
-
 func main() {
+	cmd.Execute()
+
 	appEnv = goDotEnvVariable("APP_ENV")
 	mdbUri = goDotEnvVariable("MONGO_URI")
 	if mdbUri == "" {
 		log.Fatal("Unable to extract 'MONGO_URI' environment variable")
 	}
 
-	rootCmd.Flags().IntVarP(
-		&Port,
-		"port",
-		"p",
-		3000, "port to run the server on",
-	)
-
-	if err := rootCmd.Execute(); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func run() error {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 
@@ -70,12 +49,12 @@ func run() error {
 	if err := startServer(ctx); err != nil {
 		log.Fatalf("failed to start server: %v\n", err)
 	}
-
-	return nil
 }
 
 func startServer(ctx context.Context) (err error) {
-	portStr := fmt.Sprintf(":%d", Port)
+	port := viper.GetInt("port")
+
+	portStr := fmt.Sprintf(":%d", port)
 
 	log.Println("starting server")
 
