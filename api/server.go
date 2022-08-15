@@ -37,14 +37,14 @@ func (s *Server) ConnectDB(uri string) {
 	}
 	s.Client = client
 	if err := s.Client.Ping(nil, nil); err != nil {
-		log.Fatal("error connecting to database")
+		log.Fatal("failed to connect to database: %v\n", err)
 	}
 	log.Println("connected to database")
 }
 
 func (s *Server) DisconnectDB() {
 	if err := s.Client.Disconnect(context.Background()); err != nil {
-		log.Fatal("error disconnecting from database")
+		log.Fatalf("failed to disconnect from database: %v\n", err)
 	}
 	s.Client = nil
 	log.Println("disconnected from database")
