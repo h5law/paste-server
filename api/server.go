@@ -37,7 +37,7 @@ func (s *Server) ConnectDB(uri string) {
 	}
 	s.Client = client
 	if err := s.Client.Ping(nil, nil); err != nil {
-		log.Fatal("failed to connect to database: %v\n", err)
+		log.Fatalf("failed to connect to database: %v\n", err)
 	}
 	log.Println("connected to database")
 }
