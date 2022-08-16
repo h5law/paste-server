@@ -9,6 +9,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -16,6 +17,8 @@ import (
 	"github.com/golang/gddo/httputil/header"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
+	"github.com/spf13/viper"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -25,44 +28,110 @@ import (
 var dbName string = "pastes"
 var collName string = "files"
 
-type Server struct {
+// Load environment varaibles
+func goDotEnvVariable(key string) string {
+	if err := godotenv.Load(".env"); err != nil {
+		log.Fatalf("Error loading .env file")
+	}
+	return os.Getenv(key)
+}
+
+type Handler struct {
 	*mux.Router
 	*mongo.Client
 }
 
-func (s *Server) ConnectDB(uri string) {
+func (h *Handler) ConnectDB(uri string) {
 	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI(uri))
 	if err != nil {
 		log.Fatal(err)
 	}
-	s.Client = client
-	if err := s.Client.Ping(nil, nil); err != nil {
+	if err := client.Ping(nil, nil); err != nil {
 		log.Fatalf("failed to connect to database: %v\n", err)
 	}
+	h.Client = client
 	log.Println("connected to database")
 }
 
-func (s *Server) DisconnectDB() {
-	if err := s.Client.Disconnect(context.Background()); err != nil {
+func (h *Handler) DisconnectDB() {
+	if err := h.Client.Disconnect(context.Background()); err != nil {
 		log.Fatalf("failed to disconnect from database: %v\n", err)
 	}
-	s.Client = nil
+	h.Client = nil
 	log.Println("disconnected from database")
 }
 
-func (s *Server) routes() {
-	s.HandleFunc("/", s.createPaste()).Methods("POST")
-	s.HandleFunc("/{uuid}", s.getPaste()).Methods("GET")
-	s.HandleFunc("/{uuid}", s.updatePaste()).Methods("PUT")
-	s.HandleFunc("/{uuid}", s.deletePaste()).Methods("DELETE")
+func (h *Handler) routes() {
+	h.HandleFunc("/", h.createPaste()).Methods("POST")
+	h.HandleFunc("/{uuid}", h.getPaste()).Methods("GET")
+	h.HandleFunc("/{uuid}", h.updatePaste()).Methods("PUT")
+	h.HandleFunc("/{uuid}", h.deletePaste()).Methods("DELETE")
 }
 
-func NewServer() *Server {
-	s := &Server{
+func NewHandler() *Handler {
+	h := &Handler{
 		Router: mux.NewRouter(),
 	}
-	s.routes()
-	return s
+
+	h.routes()
+	return h
+}
+
+func StartServer(ctx context.Context) (err error) {
+	port := viper.GetInt("port")
+	portStr := fmt.Sprintf(":%d", port)
+
+	// Load connection URI for mongo from .env
+	uri := goDotEnvVariable("MONGO_URI")
+	if uri == "" {
+		log.Fatal("Unable to extract 'MONGO_URI' environment variable")
+	}
+
+	h := NewHandler()
+
+	log.Println("starting server")
+
+	srv := &http.Server{
+		Addr:         portStr,
+		WriteTimeout: time.Second * 15,
+		ReadTimeout:  time.Second * 15,
+		IdleTimeout:  time.Second * 60,
+		Handler:      h,
+	}
+
+	// Start server in go routine so non-blocking
+	go func() {
+		if err = srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen error: %v\n", err)
+		}
+	}()
+
+	log.Println("paste-server started")
+
+	// Connect to MongoDB and defer disconnection
+	h.ConnectDB(uri)
+
+	// Context has been cancelled - stop everything
+	<-ctx.Done()
+
+	log.Println("stopping server")
+
+	// Create context and shutdown server
+	ctxShutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	h.DisconnectDB()
+	if err = srv.Shutdown(ctxShutdown); err != nil {
+		log.Fatalf("server shutdown failed: %v\n", err)
+	}
+
+	log.Println("paste-server stopped")
+
+	if err == http.ErrServerClosed {
+		return nil
+	}
+
+	return err
 }
 
 type PasteBody struct {
@@ -206,7 +275,7 @@ Creates a new Paste in the MongoDB database and returns a JSON document
 	expires:	Date
 }
 */
-func (s *Server) createPaste() http.HandlerFunc {
+func (h *Handler) createPaste() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		defer func() {
@@ -244,7 +313,7 @@ func (s *Server) createPaste() http.HandlerFunc {
 		}
 
 		// Create document
-		coll := s.Client.Database(dbName).Collection(collName)
+		coll := h.Client.Database(dbName).Collection(collName)
 		_, err = coll.InsertOne(context.TODO(), doc)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -276,7 +345,7 @@ Returns the Paste from the MongoDB database with the matching UUID in JSON
 	expires:	Date
 }
 */
-func (s *Server) getPaste() http.HandlerFunc {
+func (h *Handler) getPaste() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		defer func() {
@@ -290,7 +359,7 @@ func (s *Server) getPaste() http.HandlerFunc {
 		uuidStr, _ := mux.Vars(r)["uuid"]
 
 		// Fetch document matching UUID from database
-		coll := s.Client.Database(dbName).Collection(collName)
+		coll := h.Client.Database(dbName).Collection(collName)
 		var result bson.M
 		filter := bson.M{"uuid": uuidStr}
 		project := bson.M{
@@ -339,7 +408,7 @@ Updates an existing Paste in the MongoDB database and returns a JSON document
 	expiresAt:	Date
 }
 */
-func (s *Server) updatePaste() http.HandlerFunc {
+func (h *Handler) updatePaste() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		defer func() {
@@ -366,7 +435,7 @@ func (s *Server) updatePaste() http.HandlerFunc {
 		}
 
 		// Get and load current document state
-		coll := s.Client.Database(dbName).Collection(collName)
+		coll := h.Client.Database(dbName).Collection(collName)
 		var result bson.M
 		filter := bson.M{"uuid": uuidStr}
 		project := bson.M{
@@ -445,7 +514,7 @@ r.Body:
 
 Deletes an existing Paste in the MongoDB database
 */
-func (s *Server) deletePaste() http.HandlerFunc {
+func (h *Handler) deletePaste() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		defer func() {
@@ -474,7 +543,7 @@ func (s *Server) deletePaste() http.HandlerFunc {
 		}
 
 		// Check document exists and accessKey is the same
-		coll := s.Client.Database(dbName).Collection(collName)
+		coll := h.Client.Database(dbName).Collection(collName)
 		var result bson.M
 		filter := bson.M{"uuid": uuidStr}
 		project := bson.M{
