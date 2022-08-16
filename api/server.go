@@ -9,7 +9,6 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -17,8 +16,6 @@ import (
 	"github.com/golang/gddo/httputil/header"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"github.com/joho/godotenv"
-	"github.com/spf13/viper"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -27,14 +24,6 @@ import (
 
 var dbName string = "pastes"
 var collName string = "files"
-
-// Load environment varaibles
-func goDotEnvVariable(key string) string {
-	if err := godotenv.Load(".env"); err != nil {
-		log.Fatalf("Error loading .env file")
-	}
-	return os.Getenv(key)
-}
 
 type Handler struct {
 	*mux.Router
@@ -75,63 +64,6 @@ func NewHandler() *Handler {
 
 	h.routes()
 	return h
-}
-
-func StartServer(ctx context.Context) (err error) {
-	port := viper.GetInt("port")
-	portStr := fmt.Sprintf(":%d", port)
-
-	// Load connection URI for mongo from .env
-	uri := goDotEnvVariable("MONGO_URI")
-	if uri == "" {
-		log.Fatal("Unable to extract 'MONGO_URI' environment variable")
-	}
-
-	h := NewHandler()
-
-	log.Println("starting server")
-
-	srv := &http.Server{
-		Addr:         portStr,
-		WriteTimeout: time.Second * 15,
-		ReadTimeout:  time.Second * 15,
-		IdleTimeout:  time.Second * 60,
-		Handler:      h,
-	}
-
-	// Start server in go routine so non-blocking
-	go func() {
-		if err = srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("listen error: %v\n", err)
-		}
-	}()
-
-	log.Println("paste-server started")
-
-	// Connect to MongoDB and defer disconnection
-	h.ConnectDB(uri)
-
-	// Context has been cancelled - stop everything
-	<-ctx.Done()
-
-	log.Println("stopping server")
-
-	// Create context and shutdown server
-	ctxShutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	h.DisconnectDB()
-	if err = srv.Shutdown(ctxShutdown); err != nil {
-		log.Fatalf("server shutdown failed: %v\n", err)
-	}
-
-	log.Println("paste-server stopped")
-
-	if err == http.ErrServerClosed {
-		return nil
-	}
-
-	return err
 }
 
 type PasteBody struct {
