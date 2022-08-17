@@ -22,7 +22,6 @@ THE SOFTWARE.
 package cmd
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -40,18 +39,14 @@ var (
 		Long: `Start a paste-server instance to interact with a MongoDB
 database to create, read, update and delete temporary pastes`,
 		Version: "ALPHA-0.1.1",
-		Run: func(cmd *cobra.Command, args []string) {
-			return
-		}
+		//Run: func(cmd *cobra.Command, args []string) {}
 	}
 )
 
 func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
-	fmt.Println(err)
 }
 
 func init() {
