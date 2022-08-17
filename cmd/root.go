@@ -51,7 +51,7 @@ func init() {
 		&verbose,
 		"verbose",
 		"v",
-		false, "print verbose logs",
+		false, "give detailed output",
 	)
 
 	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
