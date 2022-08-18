@@ -26,6 +26,6 @@ import (
 )
 
 func main() {
-	// Get command line arguments
+	// Get CLI args and execute subcommands
 	cmd.Execute()
 }
