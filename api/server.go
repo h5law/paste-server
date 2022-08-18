@@ -90,10 +90,10 @@ func NewHandler() *Handler {
 }
 
 type PasteBody struct {
-	Content   []string `json:"content"`
-	FileType  string   `json:"filetype,omitempty"`
-	ExpiresIn int      `json:"expiresIn,omitempty"`
-	AccessKey string   `json:"accessKey,omitempty"`
+	Content   string `json:"content"`
+	FileType  string `json:"filetype,omitempty"`
+	ExpiresIn int    `json:"expiresIn,omitempty"`
+	AccessKey string `json:"accessKey,omitempty"`
 }
 
 type Paste struct {
@@ -121,10 +121,10 @@ func (p *Paste) NewPaste(src *PasteBody) error {
 		return errors.New("No paste information given")
 	}
 
-	if src.Content == nil {
+	if src.Content == "" {
 		return errors.New("Content field empty")
 	}
-	p.Content = src.Content
+	p.Content = strings.Split(src.Content, "\n")
 
 	// Default to plaintext if not set
 	p.FileType = "plaintext"
@@ -155,8 +155,11 @@ func (p *Paste) EditPaste(src *PasteBody) error {
 	}
 
 	// Check if any changes have been made and are valid
-	if src.Content != nil && reflect.DeepEqual(src.Content, p.Content) {
-		return errors.New("No changes made to content field")
+	if src.Content != "" {
+		nC := strings.Split(src.Content, "\n")
+		if reflect.DeepEqual(nC, p.Content) {
+			return errors.New("No changes made to content field")
+		}
 	}
 	if src.FileType != "" && src.FileType == p.FileType {
 		return errors.New("No changes made to filetype field")
@@ -170,8 +173,8 @@ func (p *Paste) EditPaste(src *PasteBody) error {
 	}
 
 	// Apply changes
-	if src.Content != nil {
-		p.Content = src.Content
+	if src.Content != "" {
+		p.Content = strings.Split(src.Content, "\n")
 	}
 	if src.FileType != "" {
 		p.FileType = src.FileType
