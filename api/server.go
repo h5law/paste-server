@@ -230,7 +230,7 @@ Creates a new Paste in the MongoDB database and returns a JSON document
 	expires:	Date
 }
 */
-func (h Handler) createPaste() http.HandlerFunc {
+func (h *Handler) createPaste() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		defer func() {
@@ -300,7 +300,7 @@ Returns the Paste from the MongoDB database with the matching UUID in JSON
 	expires:	Date
 }
 */
-func (h Handler) getPaste() http.HandlerFunc {
+func (h *Handler) getPaste() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		defer func() {
@@ -363,7 +363,7 @@ Updates an existing Paste in the MongoDB database and returns a JSON document
 	expiresAt:	Date
 }
 */
-func (h Handler) updatePaste() http.HandlerFunc {
+func (h *Handler) updatePaste() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		defer func() {
@@ -469,7 +469,7 @@ r.Body:
 
 Deletes an existing Paste in the MongoDB database
 */
-func (h Handler) deletePaste() http.HandlerFunc {
+func (h *Handler) deletePaste() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		defer func() {
