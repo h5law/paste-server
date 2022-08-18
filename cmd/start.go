@@ -156,7 +156,7 @@ func init() {
 	)
 
 	viper.BindPFlag("port", startCmd.Flags().Lookup("port"))
-	viper.BindPFlag("logfile", startCmd.Flags().Lookup("logFile"))
+	viper.BindPFlag("logfile", startCmd.Flags().Lookup("logfile"))
 	viper.SetDefault("port", 3000)
 	viper.SetDefault("logFile", "")
 }
