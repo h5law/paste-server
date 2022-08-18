@@ -24,13 +24,13 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"time"
 
 	"github.com/h5law/paste-server/api"
+	log "github.com/h5law/paste-server/logger"
 	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -57,7 +57,7 @@ provided logs will be appended to that file (creating it if it doesn't exist).`,
 // Load environment varaibles
 func goDotEnvVariable(key string) string {
 	if err := godotenv.Load(".env"); err != nil {
-		log.Fatalf("Error loading .env file")
+		log.Print("fatal", "Error loading .env file")
 	}
 	return os.Getenv(key)
 }
@@ -72,12 +72,12 @@ func prepareServer() {
 	// Listen for interrupt
 	go func() {
 		oscall := <-c
-		log.Printf("system call: %v\n", oscall)
+		log.Print("warn", "system call: %v", oscall)
 		cancel()
 	}()
 
 	if err := startServer(ctx); err != nil {
-		log.Fatalf("failed to start server: %v\n", err)
+		log.Print("fatal", "failed to start server: %v", err)
 	}
 }
 
@@ -88,12 +88,12 @@ func startServer(ctx context.Context) error {
 	// Load connection URI for mongo from .env
 	uri := goDotEnvVariable("MONGO_URI")
 	if uri == "" {
-		log.Fatal("Unable to extract 'MONGO_URI' environment variable")
+		log.Print("fatal", "Unable to extract 'MONGO_URI' environment variable")
 	}
 
 	h := api.NewHandler()
 
-	log.Println("starting server")
+	log.Print("info", "starting server")
 
 	srv := &http.Server{
 		Addr:         portStr,
@@ -106,11 +106,11 @@ func startServer(ctx context.Context) error {
 	// Start server in go routine so non-blocking
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("listen error: %v\n", err)
+			log.Print("fatal", "listen error: %v", err)
 		}
 	}()
 
-	log.Printf("paste-server started on %v\n", portStr)
+	log.Print("info", "paste-server started on %v", portStr)
 
 	// Connect to MongoDB and defer disconnection
 	h.ConnectDB(uri)
@@ -118,7 +118,7 @@ func startServer(ctx context.Context) error {
 	// Context has been cancelled - stop everything
 	<-ctx.Done()
 
-	log.Println("stopping server")
+	log.Print("info", "stopping server")
 
 	// Create context and shutdown server
 	ctxShutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -127,10 +127,10 @@ func startServer(ctx context.Context) error {
 	h.DisconnectDB()
 	err := srv.Shutdown(ctxShutdown)
 	if err != nil {
-		log.Fatalf("server shutdown failed: %v\n", err)
+		log.Print("fatal", "server shutdown failed: %v", err)
 	}
 
-	log.Println("paste-server stopped")
+	log.Print("info", "paste-server stopped")
 
 	if err == http.ErrServerClosed {
 		return nil
