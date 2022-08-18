@@ -90,10 +90,10 @@ func NewHandler() *Handler {
 }
 
 type PasteBody struct {
-	Content   string `json:"content"`
-	FileType  string `json:"filetype,omitempty"`
-	ExpiresIn int    `json:"expiresIn,omitempty"`
-	AccessKey string `json:"accessKey,omitempty"`
+	Content   []string `json:"content"`
+	FileType  string   `json:"filetype,omitempty"`
+	ExpiresIn int      `json:"expiresIn,omitempty"`
+	AccessKey string   `json:"accessKey,omitempty"`
 }
 
 type Paste struct {
@@ -121,10 +121,10 @@ func (p *Paste) NewPaste(src *PasteBody) error {
 		return errors.New("No paste information given")
 	}
 
-	if src.Content == "" {
+	if src.Content == nil {
 		return errors.New("Content field empty")
 	}
-	p.Content = strings.Split(src.Content, "\n")
+	p.Content = src.Content
 
 	// Default to plaintext if not set
 	p.FileType = "plaintext"
@@ -155,11 +155,8 @@ func (p *Paste) EditPaste(src *PasteBody) error {
 	}
 
 	// Check if any changes have been made and are valid
-	if src.Content != "" {
-		nC := strings.Split(src.Content, "\n")
-		if reflect.DeepEqual(nC, p.Content) {
-			return errors.New("No changes made to content field")
-		}
+	if src.Content != nil && reflect.DeepEqual(src.Content, p.Content) {
+		return errors.New("No changes made to content field")
 	}
 	if src.FileType != "" && src.FileType == p.FileType {
 		return errors.New("No changes made to filetype field")
@@ -173,8 +170,8 @@ func (p *Paste) EditPaste(src *PasteBody) error {
 	}
 
 	// Apply changes
-	if src.Content != "" {
-		p.Content = strings.Split(src.Content, "\n")
+	if src.Content != nil {
+		p.Content = src.Content
 	}
 	if src.FileType != "" {
 		p.FileType = src.FileType
@@ -561,6 +558,7 @@ func (mr *badRequest) Error() string {
 }
 
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst interface{}) error {
+	// Check header is JSON
 	if r.Header.Get("Content-Type") != "" {
 		value, _ := header.ParseValueAndParams(r.Header, "Content-Type")
 		if value != "application/json" {
@@ -569,13 +567,14 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst interface{}) err
 		}
 	}
 
+	// Set max body size to 1MB
 	r.Body = http.MaxBytesReader(w, r.Body, 1048576)
 
+	// Create decoder and throw error with non recognised fields
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 
-	err := dec.Decode(&dst)
-	if err != nil {
+	if err := dec.Decode(&dst); err != nil {
 		var syntaxError *json.SyntaxError
 		var unmarshalTypeError *json.UnmarshalTypeError
 
@@ -610,8 +609,8 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst interface{}) err
 		}
 	}
 
-	err = dec.Decode(&struct{}{})
-	if err != io.EOF {
+	// Try and decode again to check only a single JSON object was sent
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
 		msg := "Request body must only contain a single JSON object"
 		return &badRequest{status: http.StatusBadRequest, msg: msg}
 	}
