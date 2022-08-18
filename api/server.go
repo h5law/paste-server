@@ -27,7 +27,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net/http"
 	"reflect"
@@ -37,14 +36,17 @@ import (
 	"github.com/golang/gddo/httputil/header"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	log "github.com/h5law/paste-server/logger"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-var dbName string = "pastes"
-var collName string = "files"
+const (
+	dbName   string = "pastes"
+	collName string = "files"
+)
 
 type Handler struct {
 	*mux.Router
@@ -54,21 +56,21 @@ type Handler struct {
 func (h *Handler) ConnectDB(uri string) {
 	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI(uri))
 	if err != nil {
-		log.Fatal(err)
+		log.Print("fatal", "%v", err)
 	}
 	if err := client.Ping(nil, nil); err != nil {
-		log.Fatalf("failed to connect to database: %v\n", err)
+		log.Print("fatal", "failed to connect to database: %v", err)
 	}
 	h.Client = client
-	log.Println("connected to database")
+	log.Print("info", "connected to database")
 }
 
 func (h *Handler) DisconnectDB() {
 	if err := h.Client.Disconnect(context.Background()); err != nil {
-		log.Fatalf("failed to disconnect from database: %v\n", err)
+		log.Print("fatal", "failed to disconnect from database: %v", err)
 	}
 	h.Client = nil
-	log.Println("disconnected from database")
+	log.Print("info", "disconnected from database")
 }
 
 func (h *Handler) routes() {
@@ -232,7 +234,7 @@ func (h Handler) createPaste() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		defer func() {
-			log.Printf("%s %s [%v]\n",
+			log.Print("info", "%s %s [%v]",
 				r.Method,
 				r.URL.Path,
 				time.Since(start),
@@ -247,7 +249,7 @@ func (h Handler) createPaste() http.HandlerFunc {
 			if errors.As(err, &mr) {
 				http.Error(w, mr.msg, mr.status)
 			} else {
-				log.Print(err.Error())
+				log.Print("error", "%v", err.Error())
 				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			}
 			return
@@ -261,7 +263,7 @@ func (h Handler) createPaste() http.HandlerFunc {
 
 		doc, err := toBsonDoc(&paste)
 		if err != nil {
-			log.Println(err)
+			log.Print("error", "%v", err)
 			http.Error(w, "Error converting request body to BSON document", http.StatusInternalServerError)
 		}
 
@@ -302,7 +304,7 @@ func (h Handler) getPaste() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		defer func() {
-			log.Printf("%s %s [%v]\n",
+			log.Print("info", "%s %s [%v]",
 				r.Method,
 				r.URL.Path,
 				time.Since(start),
@@ -365,7 +367,7 @@ func (h Handler) updatePaste() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		defer func() {
-			log.Printf("%s %s [%v]\n",
+			log.Print("info", "%s %s [%v]",
 				r.Method,
 				r.URL.Path,
 				time.Since(start),
@@ -381,7 +383,7 @@ func (h Handler) updatePaste() http.HandlerFunc {
 			if errors.As(err, &mr) {
 				http.Error(w, mr.msg, mr.status)
 			} else {
-				log.Print(err.Error())
+				log.Print("error", "%v", err.Error())
 				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			}
 			return
@@ -426,7 +428,7 @@ func (h Handler) updatePaste() http.HandlerFunc {
 		// Convert updated paste to BSON document
 		doc, err := toBsonDoc(&paste)
 		if err != nil {
-			log.Println(err)
+			log.Print("error", "%v", err)
 			http.Error(w, "Error converting request body to BSON document", http.StatusInternalServerError)
 		}
 
@@ -471,7 +473,7 @@ func (h Handler) deletePaste() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		defer func() {
-			log.Printf("%s %s [%v]\n",
+			log.Print("info", "%s %s [%v]",
 				r.Method,
 				r.URL.Path,
 				time.Since(start),
@@ -489,7 +491,7 @@ func (h Handler) deletePaste() http.HandlerFunc {
 			if errors.As(err, &mr) {
 				http.Error(w, mr.msg, mr.status)
 			} else {
-				log.Print(err.Error())
+				log.Print("error", "%v", err.Error())
 				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			}
 			return
