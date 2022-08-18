@@ -37,8 +37,9 @@ import (
 )
 
 var (
-	port    int
-	logFile string
+	port       int
+	logFile    string
+	jsonFormat bool
 
 	startCmd = &cobra.Command{
 		Use:   "start",
@@ -154,9 +155,17 @@ func init() {
 		"l",
 		"", "path to log file",
 	)
+	startCmd.Flags().BoolVarP(
+		&jsonFormat,
+		"json",
+		"j",
+		false, "use json formatting for logs",
+	)
 
 	viper.BindPFlag("port", startCmd.Flags().Lookup("port"))
 	viper.BindPFlag("logfile", startCmd.Flags().Lookup("logfile"))
+	viper.BindPFlag("json", startCmd.Flags().Lookup("json"))
 	viper.SetDefault("port", 3000)
-	viper.SetDefault("logFile", "")
+	viper.SetDefault("logfile", "")
+	viper.SetDefault("json", false)
 }

@@ -8,14 +8,17 @@ import (
 	"github.com/spf13/viper"
 )
 
-func init() {
-	// Use JSON formatting
-	log.SetFormatter(&log.JSONFormatter{})
-}
-
 // Wrapper function exported for use in the rest of module
 func Print(level, msg string, args ...interface{}) {
 	verbose := viper.GetBool("verbose")
+
+	// Set log format
+	log.SetFormatter(&log.TextFormatter{
+		FullTimestamp: true,
+	})
+	if json := viper.GetBool("json"); json {
+		log.SetFormatter(&log.JSONFormatter{})
+	}
 
 	message := fmt.Sprintf(msg, args...)
 
