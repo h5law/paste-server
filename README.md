@@ -27,8 +27,8 @@ with the following structure:
             - ~~When no logfile given use `os.Stdout` else redirect all output to logfile~~
         - ~~`-v|--verbose` flag support~~
     - ~~version~~
-- Automatically convert `content` if given as a string into an array of strings
-  seperated on linebreaks
+- ~~Automatically convert `content` if given as a string into an array of strings
+  seperated on linebreaks~~
 
 ## .env
 
