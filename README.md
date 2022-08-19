@@ -91,6 +91,6 @@ body. Accepted fields are:
 ## TODO
 
 - Seperate route handler into 2 sections `/api` and `/{uuid}`
-- `/api` will act as MongoDB interaction routes
-- `/{uuid}` will be a static site generator to view and interact with
+    - `/api` will act as MongoDB interaction routes
+    - `/{uuid}` will be a static site generator to view and interact with
 pastes
