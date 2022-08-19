@@ -20,22 +20,15 @@ with the following structure:
 
 ## TODO
 
-- ~~Add subcommands with Cobra~~
-    - ~~start~~
-        - ~~`-p|--port` flag support~~
-        - ~~`-l|--logfile` flag support~~
-            - ~~When no logfile given use `os.Stdout` else redirect all output to logfile~~
-        - ~~`-v|--verbose` flag support~~
-    - ~~version~~
-- ~~Automatically convert `content` if given as a string into an array of strings
-  seperated on linebreaks~~
+- Seperate route handler into 2 sections `/api` and `/{uuid}`
+    - `/api` will act as MongoDB interaction routes
+    - `/{uuid}` will be a static site generator to view and interact with
+      pastes
 
 ## .env
 
 Your `.env` file should contain a `MONGO_URI` string used to connect to the
-databse and an `APP_ENV` string to state what environment the server is being
-ran in: `test`, `development` or `production`
-
+databse.
 
 ## MongoDB
 
