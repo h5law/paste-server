@@ -18,17 +18,40 @@ with the following structure:
 }
 ```
 
-## TODO
+## Install
 
-- Seperate route handler into 2 sections `/api` and `/{uuid}`
-    - `/api` will act as MongoDB interaction routes
-    - `/{uuid}` will be a static site generator to view and interact with
-      pastes
+Before you can run an instance of the paste-server locally you must first
+set up and configure (only one command) a MongoDB instance see [here](#MongoDB).
 
-## .env
 
-Your `.env` file should contain a `MONGO_URI` string used to connect to the
-databse.
+First clone this repo and enter into the directory
+
+```
+git clone https://github.com/h5law/paste-server
+cd paste-server
+```
+
+Then create a `.env` file in the root directory containing the MongoDB
+connection URI for the database you have set up
+```
+echo "MONGO_URI=<your connection URI here>" > .env
+```
+
+Then install all dependencies
+```
+go mod tidy
+```
+
+Finally build the binary
+```
+go build -o paste-server
+```
+
+Now you can run `./paste-server` to see detailed usage info or to just simply
+run the server
+```
+./paste-server start
+```
 
 ## MongoDB
 
@@ -64,3 +87,10 @@ body. Accepted fields are:
     "accessKey":    String,
 }
 ```
+
+## TODO
+
+- Seperate route handler into 2 sections `/api` and `/{uuid}`
+- `/api` will act as MongoDB interaction routes
+- `/{uuid}` will be a static site generator to view and interact with
+pastes
