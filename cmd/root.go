@@ -55,5 +55,5 @@ func init() {
 	)
 
 	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
-	viper.SetDefault("verbose", "false")
+	viper.SetDefault("verbose", false)
 }
