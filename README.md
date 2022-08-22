@@ -94,3 +94,4 @@ body. Accepted fields are:
     - `/api` will act as MongoDB interaction routes
     - `/{uuid}` will be a static site generator to view and interact with
 pastes
+- Add `-s` and `--secure` flags to `start` subcommand to use TLS
