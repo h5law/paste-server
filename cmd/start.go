@@ -49,6 +49,7 @@ var (
 	port       int
 	logFile    string
 	jsonFormat bool
+	maxUpload  int
 
 	startCmd = &cobra.Command{
 		Use:   "start",
@@ -121,6 +122,9 @@ func startServer(ctx context.Context) error {
 	}()
 
 	log.Print("info", "paste-server started on %v", portStr)
+	maxMiB := int64(viper.GetInt("max-size"))
+	maxKiB := maxMiB * 1048576
+	log.Print("info", "using max-upload size: %dMB (%dKiB)", maxMiB, maxKiB)
 
 	// Connect to MongoDB and defer disconnection
 	h.ConnectDB(uri)
@@ -170,11 +174,19 @@ func init() {
 		"j",
 		false, "use json formatting for logs",
 	)
+	startCmd.Flags().IntVarP(
+		&maxUpload,
+		"max-size",
+		"",
+		1, "max request body size in MB",
+	)
 
 	viper.BindPFlag("port", startCmd.Flags().Lookup("port"))
 	viper.BindPFlag("logfile", startCmd.Flags().Lookup("logfile"))
 	viper.BindPFlag("json", startCmd.Flags().Lookup("json"))
+	viper.BindPFlag("max-size", startCmd.Flags().Lookup("max-size"))
 	viper.SetDefault("port", 3000)
 	viper.SetDefault("logfile", "")
 	viper.SetDefault("json", false)
+	viper.SetDefault("max-size", 1)
 }

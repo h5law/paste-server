@@ -46,6 +46,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	log "github.com/h5law/paste-server/logger"
+	"github.com/spf13/viper"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -576,8 +577,10 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst interface{}) err
 		}
 	}
 
-	// Set max body size to 1MB
-	r.Body = http.MaxBytesReader(w, r.Body, 1048576)
+	// Set max body size according to flag
+	maxMiB := int64(viper.GetInt("max-size"))
+	maxKiB := maxMiB * 1048576 // 1024*1024KiB = 1MiB
+	r.Body = http.MaxBytesReader(w, r.Body, maxKiB)
 
 	// Create decoder and throw error with non recognised fields
 	dec := json.NewDecoder(r.Body)
@@ -610,7 +613,7 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst interface{}) err
 			return &badRequest{status: http.StatusBadRequest, msg: msg}
 
 		case err.Error() == "http: request body too large":
-			msg := "Request body must not be larger than 1MB"
+			msg := fmt.Sprintf("Request body must not be larger than %dMB", maxMiB)
 			return &badRequest{status: http.StatusRequestEntityTooLarge, msg: msg}
 
 		default:
