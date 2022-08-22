@@ -160,7 +160,7 @@ func (p *Paste) NewPaste(src *PasteBody) error {
 }
 
 func (p *Paste) EditPaste(src *PasteBody) error {
-	if src == nil {
+	if src.Content == nil && src.ExpiresIn == 0 && src.FileType == "" {
 		return errors.New("No updates given")
 	}
 
