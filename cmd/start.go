@@ -40,7 +40,6 @@ import (
 
 	"github.com/h5law/paste-server/api"
 	log "github.com/h5law/paste-server/logger"
-	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -64,14 +63,6 @@ provided logs will be appended to that file (creating it if it doesn't exist).`,
 		},
 	}
 )
-
-// Load environment varaibles
-func goDotEnvVariable(key string) string {
-	if err := godotenv.Load(".env"); err != nil {
-		log.Print("fatal", "Error loading .env file")
-	}
-	return os.Getenv(key)
-}
 
 func prepareServer() {
 	// Enable graceful shutdown on signal interrupts
@@ -97,9 +88,9 @@ func startServer(ctx context.Context) error {
 	portStr := fmt.Sprintf(":%d", port)
 
 	// Load connection URI for mongo from .env
-	uri := goDotEnvVariable("MONGO_URI")
+	uri := viper.GetString("uri")
 	if uri == "" {
-		log.Print("fatal", "Unable to extract 'MONGO_URI' environment variable")
+		log.Print("fatal", "`uri` not set in config file")
 	}
 
 	h := api.NewHandler()
