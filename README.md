@@ -31,10 +31,11 @@ git clone https://github.com/h5law/paste-server
 cd paste-server
 ```
 
-Then create a `.env` file in the root directory containing the MongoDB
-connection URI for the database you have set up
+Then create a config file (by default paste-server will look for it at
+`$HOME/.paste.yaml`) containing the MongoDB connection URI for the database you
+have set up
 ```
-echo "MONGO_URI=<your connection URI here>" > .env
+echo "uri: <your connection URI here>" >> ~/.paste.yaml
 ```
 
 Then install all dependencies
