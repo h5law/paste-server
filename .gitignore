@@ -1,5 +1,2 @@
 # Build directory
 build/
-
-# dot environment variables file
-.env
