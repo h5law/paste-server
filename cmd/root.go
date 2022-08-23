@@ -31,6 +31,7 @@ POSSIBILITY OF SUCH DAMAGE.
 package cmd
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -38,6 +39,7 @@ import (
 )
 
 var (
+	cfgFile string
 	verbose bool
 
 	rootCmd = &cobra.Command{
@@ -56,13 +58,43 @@ func Execute() {
 }
 
 func init() {
+	initConfig()
+
 	rootCmd.PersistentFlags().BoolVarP(
 		&verbose,
 		"verbose",
 		"v",
 		false, "give detailed output",
 	)
+	rootCmd.PersistentFlags().StringVar(
+		&cfgFile,
+		"config",
+		"",
+		"config file (default is $HOME/.paste.yaml)",
+	)
 
 	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
 	viper.SetDefault("verbose", false)
+}
+
+func initConfig() {
+	if cfgFile != "" {
+		viper.SetConfigFile(cfgFile)
+	} else {
+		// Find home directory
+		home, err := os.UserHomeDir()
+		cobra.CheckErr(err)
+
+		// Search for config file in home directory with name ".paste"
+		viper.AddConfigPath(home)
+		viper.SetConfigType("yaml")
+		viper.SetConfigName(".paste")
+	}
+
+	viper.AutomaticEnv() // read in env variables
+
+	// If config is found read it in
+	if err := viper.ReadInConfig(); err != nil {
+		fmt.Fprintln(os.Stderr, "Error reading config file: ", err)
+	}
 }
