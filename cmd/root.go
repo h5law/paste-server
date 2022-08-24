@@ -79,24 +79,39 @@ func init() {
 
 func initConfig() {
 	if cfgFile != "" {
+		// Use config file from the flag.
 		viper.SetConfigFile(cfgFile)
 	} else {
-		// Find home directory
+		// Find home directory.
 		home, err := os.UserHomeDir()
 		cobra.CheckErr(err)
 
-		// Search for config file in home directory with name ".paste"
+		// Search config in home directory with name ".paste" (without extension).
 		viper.AddConfigPath(home)
 		viper.SetConfigType("yaml")
 		viper.SetConfigName(".paste")
 	}
 
-	viper.AutomaticEnv() // read in env variables
+	viper.AutomaticEnv() // read in environment variables that match
 
-	// If config is found read it in
-	if err := viper.ReadInConfig(); err != nil {
+	// If a config file is found, read it in.
+	config := viper.ConfigFileUsed()
+	exists, _ := fileExists(config)
+	if err := viper.ReadInConfig(); err != nil && exists {
 		fmt.Fprintln(os.Stderr, "Error reading config file: ", err)
 	}
 
 	viper.WatchConfig()
+}
+
+// Check path given exists
+func fileExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
 }
