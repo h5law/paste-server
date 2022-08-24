@@ -39,6 +39,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/coreos/go-systemd/daemon"
 	"github.com/h5law/paste-server/api"
 	log "github.com/h5law/paste-server/logger"
 	"github.com/spf13/cobra"
@@ -107,6 +108,7 @@ func startServer(ctx context.Context) error {
 	}
 
 	// Start server in go routine so non-blocking
+	daemon.SdNotify(false, daemon.SdNotifyReady)
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Print("fatal", "listen error: %v", err)
