@@ -66,11 +66,11 @@ func init() {
 		"v",
 		false, "give detailed output",
 	)
-	rootCmd.PersistentFlags().StringVar(
+	rootCmd.PersistentFlags().StringVarP(
 		&cfgFile,
 		"config",
-		"",
-		"config file (default is $HOME/.paste.yaml)",
+		"c",
+		"", "config file (default is $HOME/.paste.yaml)",
 	)
 
 	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
