@@ -104,3 +104,4 @@ body. Accepted fields are:
     - `/{uuid}` will be a static site generator to view and interact with
 pastes
 - Add `-s` and `--secure` flags to `start` subcommand to use TLS
+- Make daemon work with systemd
