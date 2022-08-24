@@ -54,6 +54,8 @@ run the server
 ./paste-server start
 ```
 
+To set up the server to run as a daemon with systemd see [here](#Daemon)
+
 ## Daemon
 
 The `paste-server.service` file contains a systemd service script used to
@@ -61,6 +63,30 @@ daemonise the paste-server instance. It requires the binary to be built and
 moved to `/usr/local/bin/paste-server` and requries the config file containing
 the MongoDB connection URI string to be saved at `/etc/paste.yaml` unless
 changed.
+
+By default the service file will start on port 80 as root. You will need to
+make sure that your firewall has this port open for TCP connections (or for
+any port that you use). With firewalld you would run:
+```
+sudo firewall-cmd --add-port=<PORT>/tcp --permanent
+sudo firewall-cmd --reload
+sudo firewall-cmd --list-all
+```
+
+Make sure that the executable and config files have the right permissions:
+```
+sudo chown root:root /usr/local/bin/paste-server /etc/paste.yaml
+sudo chmod 755 /usr/local/bin/paste-server
+sudo chmod 644 /etc/paste.yaml
+```
+
+Make sure to run `sudo restorecon -rv /etc/systemd/system/paste-server.service`
+after moving the file so that systemd will recognise it - then run
+```
+sudo systemctl daemon-reload
+sudo systemctl start paste-server
+sudo systemctl enable paste-server
+```
 
 ## MongoDB
 
@@ -104,4 +130,3 @@ body. Accepted fields are:
     - `/{uuid}` will be a static site generator to view and interact with
 pastes
 - Add `-s` and `--secure` flags to `start` subcommand to use TLS
-- Make daemon work with systemd
