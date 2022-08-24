@@ -1,0 +1,11 @@
+[Unit]
+Description=paste-server daemon instance
+
+[Service]
+type=notify
+ExecStart=/usr/local/bin/paste-server start -v -l /var/log/paste-server -c /etc/paste.yaml
+WatchdogSec=30s
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
