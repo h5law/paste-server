@@ -54,6 +54,14 @@ run the server
 ./paste-server start
 ```
 
+## Daemon
+
+The `paste-server.service` file contains a systemd service script used to
+daemonise the paste-server instance. It requires the binary to be built and
+moved to `/usr/local/bin/paste-server` and requries the config file containing
+the MongoDB connection URI string to be saved at `/etc/paste.yaml` unless
+changed.
+
 ## MongoDB
 
 When setting up the database there are a few things you must do, ensure you
