@@ -36,6 +36,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/h5law/paste-server/api"
@@ -67,7 +68,7 @@ provided logs will be appended to that file (creating it if it doesn't exist).`,
 func prepareServer() {
 	// Enable graceful shutdown on signal interrupts
 	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
+	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
