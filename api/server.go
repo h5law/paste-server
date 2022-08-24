@@ -84,10 +84,10 @@ func (h *Handler) DisconnectDB() {
 }
 
 func (h *Handler) routes() {
-	h.HandleFunc("/", h.createPaste()).Methods("POST")
-	h.HandleFunc("/{uuid}", h.getPaste()).Methods("GET")
-	h.HandleFunc("/{uuid}", h.updatePaste()).Methods("PUT")
-	h.HandleFunc("/{uuid}", h.deletePaste()).Methods("DELETE")
+	h.HandleFunc("/api/new", h.createPaste()).Methods("POST")
+	h.HandleFunc("/api/{uuid}", h.getPaste()).Methods("GET")
+	h.HandleFunc("/api/{uuid}", h.updatePaste()).Methods("PUT")
+	h.HandleFunc("/api/{uuid}", h.deletePaste()).Methods("DELETE")
 }
 
 func NewHandler() *Handler {
