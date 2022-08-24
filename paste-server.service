@@ -2,7 +2,7 @@
 Description=paste-server daemon instance
 
 [Service]
-type=notify
+User=root
 ExecStart=/usr/local/bin/paste-server start -v -l /var/log/paste-server -c /etc/paste.yaml
 WatchdogSec=30s
 Restart=on-failure
