@@ -58,7 +58,7 @@ func Execute() {
 }
 
 func init() {
-	initConfig()
+	cobra.OnInitialize(initConfig)
 
 	rootCmd.PersistentFlags().BoolVarP(
 		&verbose,
