@@ -97,4 +97,6 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err != nil {
 		fmt.Fprintln(os.Stderr, "Error reading config file: ", err)
 	}
+
+	viper.WatchConfig()
 }
