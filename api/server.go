@@ -88,6 +88,7 @@ func (h *Handler) routes() {
 	h.HandleFunc("/api/{uuid}", h.getPaste()).Methods("GET")
 	h.HandleFunc("/api/{uuid}", h.updatePaste()).Methods("PUT")
 	h.HandleFunc("/api/{uuid}", h.deletePaste()).Methods("DELETE")
+	h.HandleFunc("/{uuid}", h.getPasteHTML()).Methods("GET")
 }
 
 func NewHandler() *Handler {
@@ -225,7 +226,7 @@ func bsonToPaste(b bson.M) (Paste, error) {
 	return paste, err
 }
 
-/* POST /
+/* POST /api/new
 r.Body:
 	"content"   -> required
 	"filetype"  -> optional
@@ -299,7 +300,7 @@ func (h *Handler) createPaste() http.HandlerFunc {
 	}
 }
 
-/* GET /{uuid}
+/* GET /api/{uuid}
 
 Returns the Paste from the MongoDB database with the matching UUID in JSON
 {
@@ -359,7 +360,7 @@ func (h *Handler) getPaste() http.HandlerFunc {
 	}
 }
 
-/* PUT /{uuid}
+/* PUT /api/{uuid}
 r.Body:
 	"accessKey"   -> required
 	"content"	  -> optional
@@ -473,7 +474,7 @@ func (h *Handler) updatePaste() http.HandlerFunc {
 	}
 }
 
-/* DELETE /{uuid}
+/* DELETE /api/{uuid}
 r.Body:
 	"accessKey"  -> required
 
@@ -549,6 +550,61 @@ func (h *Handler) deletePaste() http.HandlerFunc {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+/* GET /{uuid}
+Return the raw content of GET /api/{uuid} in an HTML file
+*/
+func (h *Handler) getPasteHTML() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		defer func() {
+			log.Print("info", "%s %s [%v]",
+				r.Method,
+				r.URL.Path,
+				time.Since(start),
+			)
+		}()
+
+		uuidStr, _ := mux.Vars(r)["uuid"]
+
+		// Fetch document matching UUID from database
+		coll := h.Client.Database(dbName).Collection(collName)
+		var result bson.M
+		filter := bson.M{"uuid": uuidStr}
+		project := bson.M{
+			"_id":       0,
+			"accessKey": 0,
+			"uuid":      0,
+		}
+
+		err := coll.FindOne(
+			context.TODO(),
+			filter,
+			options.FindOne().SetProjection(project),
+		).Decode(&result)
+
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				http.Error(w, "No document found with that UUID", http.StatusBadRequest)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Convert to long date format
+		result["expiresAt"] = primitive.DateTime(result["expiresAt"].(primitive.DateTime)).Time().String()
+
+		fmt.Fprintf(w, "uuid:      \t%s", uuidStr)
+		fmt.Fprintf(w, "filetype:  \t%s", result["filetype"])
+		fmt.Fprintf(w, "expiresAt: \t%s", result["expiresAt"])
+		fmt.Fprintf(w, "")
+		content := result["content"].([]string)
+		for i := 0; i < len(content); i++ {
+			fmt.Fprintf(w, "%s", content[i])
+		}
 	}
 }
 
