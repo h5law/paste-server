@@ -594,16 +594,18 @@ func (h *Handler) getPasteHTML() http.HandlerFunc {
 			return
 		}
 
-		// Convert to long date format
-		result["expiresAt"] = primitive.DateTime(result["expiresAt"].(primitive.DateTime)).Time().String()
+		paste, err := bsonToPaste(result)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 
-		fmt.Fprintf(w, "uuid:      \t%s", uuidStr)
-		fmt.Fprintf(w, "filetype:  \t%s", result["filetype"])
-		fmt.Fprintf(w, "expiresAt: \t%s", result["expiresAt"])
-		fmt.Fprintf(w, "")
-		content := result["content"].([]string)
-		for i := 0; i < len(content); i++ {
-			fmt.Fprintf(w, "%s", content[i])
+		fmt.Fprintf(w, "uuid:      \t%s\n", uuidStr)
+		fmt.Fprintf(w, "filetype:  \t%s\n", paste.FileType)
+		fmt.Fprintf(w, "expiresAt: \t%s\n", paste.ExpiresAt.Time().String())
+		fmt.Fprintf(w, "\n")
+		for _, v := range paste.Content {
+			fmt.Fprintf(w, "%s\n", v)
 		}
 	}
 }
