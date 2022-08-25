@@ -77,6 +77,7 @@ Make sure that the executable and config files have the right permissions:
 ```
 sudo chown root:root /usr/local/bin/paste-server /etc/paste.yaml
 sudo chmod 755 /usr/local/bin/paste-server
+sudo restorecon -rv /usr/local/bin/paste-server
 sudo chmod 644 /etc/paste.yaml
 ```
 
