@@ -4,7 +4,6 @@ Description=paste-server daemon instance
 [Service]
 User=root
 ExecStart=/usr/local/bin/paste-server start -v -p 80 -l /var/log/paste-server -c /etc/paste.yaml
-WatchdogSec=30s
 Restart=on-failure
 
 [Install]
