@@ -100,8 +100,6 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err != nil && exists {
 		fmt.Fprintln(os.Stderr, "Error reading config file: ", err)
 	}
-
-	viper.WatchConfig()
 }
 
 // Check path given exists
