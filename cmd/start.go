@@ -255,14 +255,12 @@ func startServerTLS(ctx context.Context) error {
 	}
 
 	// Start http server to redirect traffic to https
-	/*
-		go func() {
-			err := http.ListenAndServe(":8080", certManager.HTTPHandler(nil))
-			if err != nil && err != http.ErrServerClosed {
-				log.Print("fatal", "(http) listen error: %v", err)
-			}
-		}()
-	*/
+	go func() {
+		err := http.ListenAndServe(":80", certManager.HTTPHandler(nil))
+		if err != nil && err != http.ErrServerClosed {
+			log.Print("fatal", "(http) listen error: %v", err)
+		}
+	}()
 
 	// Start server in go routine so non-blocking
 	go func() {
