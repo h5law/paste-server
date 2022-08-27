@@ -42,9 +42,9 @@ import (
 
 	"github.com/h5law/paste-server/api"
 	log "github.com/h5law/paste-server/logger"
+	"github.com/h5law/paste-server/utils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"golang.org/x/crypto/acme/autocert"
 )
 
 var (
@@ -53,8 +53,8 @@ var (
 	jsonFormat bool
 	maxUpload  int
 	secure     bool
-	domain     string
-	certDir    string
+	tlsKey     string
+	tlsCrt     string
 
 	startCmd = &cobra.Command{
 		Use:   "start",
@@ -104,25 +104,36 @@ func init() {
 		false, "use TLS (https) mode for server",
 	)
 	startCmd.Flags().StringVarP(
-		&domain,
-		"domain",
-		"d",
-		"example.com", "domain name for server (needed for TLS certs)",
+		&tlsKey,
+		"key",
+		"",
+		"", "path to tls key file for https mode",
 	)
+	startCmd.Flags().StringVarP(
+		&tlsCrt,
+		"crt",
+		"",
+		"", "path to tls crt file for https mode",
+	)
+	if secure := viper.GetBool("tls"); secure {
+		startCmd.MarkFlagRequired("key")
+		startCmd.MarkFlagRequired("crt")
+	}
 
 	viper.BindPFlag("port", startCmd.Flags().Lookup("port"))
 	viper.BindPFlag("logfile", startCmd.Flags().Lookup("logfile"))
 	viper.BindPFlag("json", startCmd.Flags().Lookup("json"))
 	viper.BindPFlag("max-size", startCmd.Flags().Lookup("max-size"))
 	viper.BindPFlag("tls", startCmd.Flags().Lookup("tls"))
-	viper.BindPFlag("domain", startCmd.Flags().Lookup("domain"))
-	viper.BindPFlag("certs-dir", startCmd.Flags().Lookup("certs-dir"))
+	viper.BindPFlag("key", startCmd.Flags().Lookup("key"))
+	viper.BindPFlag("crt", startCmd.Flags().Lookup("crt"))
 	viper.SetDefault("port", 3000)
 	viper.SetDefault("logfile", "")
 	viper.SetDefault("json", false)
 	viper.SetDefault("max-size", 1)
 	viper.SetDefault("tls", false)
-	viper.SetDefault("domain", "example.com")
+	viper.SetDefault("key", "")
+	viper.SetDefault("crt", "")
 }
 
 func prepareServer() {
@@ -224,16 +235,19 @@ func startServerTLS(ctx context.Context) error {
 
 	h := api.NewHandler()
 
-	log.Print("info", "configuring TLS certificates")
-
-	domain := viper.GetString("domain")
-	certManager := autocert.Manager{
-		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist(domain),
-		Cache:      autocert.DirCache("certs"),
-	}
-
 	log.Print("info", "starting https server")
+
+	tlsCfg := &tls.Config{
+		MinVersion:               tls.VersionTLS12,
+		CurvePreferences:         []tls.CurveID{tls.CurveP521, tls.CurveP384, tls.CurveP256},
+		PreferServerCipherSuites: true,
+		CipherSuites: []uint16{
+			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+			tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+		},
+	}
 
 	srv := &http.Server{
 		Addr:         portStr,
@@ -241,22 +255,18 @@ func startServerTLS(ctx context.Context) error {
 		ReadTimeout:  time.Second * 15,
 		IdleTimeout:  time.Second * 60,
 		Handler:      h,
-		TLSConfig: &tls.Config{
-			GetCertificate: certManager.GetCertificate,
-		},
+		TLSConfig:    tlsCfg,
 	}
-
-	// Start http server to redirect traffic to https
-	go func() {
-		err := http.ListenAndServe(":80", certManager.HTTPHandler(nil))
-		if err != nil && err != http.ErrServerClosed {
-			log.Print("fatal", "(http) listen error: %v", err)
-		}
-	}()
 
 	// Start server in go routine so non-blocking
 	go func() {
-		err := srv.ListenAndServeTLS("", "")
+		key := viper.GetString("key")
+		crt := viper.GetString("crt")
+		if ok, err := checkTLSKeyCrt(key, crt); !ok && err != "" {
+			log.Print("fatal", err)
+			os.Exit(1)
+		}
+		err := srv.ListenAndServeTLS(crt, key)
 		if err != nil && err != http.ErrServerClosed {
 			log.Print("fatal", "(https) listen error: %v", err)
 		}
@@ -292,4 +302,28 @@ func startServerTLS(ctx context.Context) error {
 	}
 
 	return err
+}
+
+func checkTLSKeyCrt(key, crt string) (bool, string) {
+	keyExists, err := utils.FileExists(key)
+	if err != nil {
+		e := fmt.Sprintf("error checking tls key file: %s", key)
+		return false, e
+	}
+	if !keyExists {
+		e := fmt.Sprintf("key file not found: %s", key)
+		return false, e
+	}
+
+	crtExists, err := utils.FileExists(crt)
+	if err != nil {
+		e := fmt.Sprintf("error checking tls crt file: %s", crt)
+		return false, e
+	}
+	if !crtExists {
+		e := fmt.Sprintf("crt file not found: %s", key)
+		return false, e
+	}
+
+	return true, ""
 }
