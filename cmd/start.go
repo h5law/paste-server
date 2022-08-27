@@ -32,7 +32,6 @@ package cmd
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net/http"
 	"os"
@@ -40,9 +39,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/caddyserver/certmagic"
 	"github.com/h5law/paste-server/api"
 	log "github.com/h5law/paste-server/logger"
-	"github.com/h5law/paste-server/utils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -53,8 +52,8 @@ var (
 	jsonFormat bool
 	maxUpload  int
 	secure     bool
-	tlsKey     string
-	tlsCrt     string
+	domain     string
+	email      string
 
 	startCmd = &cobra.Command{
 		Use:   "start",
@@ -104,36 +103,32 @@ func init() {
 		false, "use TLS (https) mode for server",
 	)
 	startCmd.Flags().StringVarP(
-		&tlsKey,
-		"key",
-		"",
-		"", "path to tls key file for https mode",
+		&domain,
+		"domain",
+		"d",
+		"example.com", "domain to use to TLS configuration",
 	)
 	startCmd.Flags().StringVarP(
-		&tlsCrt,
-		"crt",
-		"",
-		"", "path to tls crt file for https mode",
+		&email,
+		"email",
+		"e",
+		"admin@example.com", "email to use to TLS configuration",
 	)
-	if secure := viper.GetBool("tls"); secure {
-		startCmd.MarkFlagRequired("key")
-		startCmd.MarkFlagRequired("crt")
-	}
 
 	viper.BindPFlag("port", startCmd.Flags().Lookup("port"))
 	viper.BindPFlag("logfile", startCmd.Flags().Lookup("logfile"))
 	viper.BindPFlag("json", startCmd.Flags().Lookup("json"))
 	viper.BindPFlag("max-size", startCmd.Flags().Lookup("max-size"))
 	viper.BindPFlag("tls", startCmd.Flags().Lookup("tls"))
-	viper.BindPFlag("key", startCmd.Flags().Lookup("key"))
-	viper.BindPFlag("crt", startCmd.Flags().Lookup("crt"))
+	viper.BindPFlag("domain", startCmd.Flags().Lookup("domain"))
+	viper.BindPFlag("email", startCmd.Flags().Lookup("email"))
 	viper.SetDefault("port", 3000)
 	viper.SetDefault("logfile", "")
 	viper.SetDefault("json", false)
 	viper.SetDefault("max-size", 1)
 	viper.SetDefault("tls", false)
-	viper.SetDefault("key", "")
-	viper.SetDefault("crt", "")
+	viper.SetDefault("domain", "example.com")
+	viper.SetDefault("email", "admin@example.com")
 }
 
 func prepareServer() {
@@ -223,10 +218,9 @@ func startServer(ctx context.Context) error {
 	return err
 }
 
+// Very simple with certmagic
+// TODO add srv like in normal http for contexts etc
 func startServerTLS(ctx context.Context) error {
-	port := viper.GetInt("port")
-	portStr := fmt.Sprintf(":%d", port)
-
 	// Load connection URI for mongo from .env
 	uri := viper.GetString("uri")
 	if uri == "" {
@@ -237,42 +231,22 @@ func startServerTLS(ctx context.Context) error {
 
 	log.Print("info", "starting https server")
 
-	tlsCfg := &tls.Config{
-		MinVersion:               tls.VersionTLS12,
-		CurvePreferences:         []tls.CurveID{tls.CurveP521, tls.CurveP384, tls.CurveP256},
-		PreferServerCipherSuites: true,
-		CipherSuites: []uint16{
-			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-			tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
-		},
-	}
-
-	srv := &http.Server{
-		Addr:         portStr,
-		WriteTimeout: time.Second * 15,
-		ReadTimeout:  time.Second * 15,
-		IdleTimeout:  time.Second * 60,
-		Handler:      h,
-		TLSConfig:    tlsCfg,
-	}
-
 	// Start server in go routine so non-blocking
 	go func() {
-		key := viper.GetString("key")
-		crt := viper.GetString("crt")
-		if ok, err := checkTLSKeyCrt(key, crt); !ok && err != "" {
-			log.Print("fatal", err)
-			os.Exit(1)
-		}
-		err := srv.ListenAndServeTLS(crt, key)
+		email := viper.GetString("email")
+		domain := viper.GetString("domain")
+
+		certmagic.DefaultACME.Agreed = true
+		certmagic.DefaultACME.Email = email
+		certmagic.DefaultACME.CA = certmagic.LetsEncryptProductionCA
+
+		err := certmagic.HTTPS([]string{domain, "www." + domain}, h)
 		if err != nil && err != http.ErrServerClosed {
 			log.Print("fatal", "(https) listen error: %v", err)
 		}
 	}()
 
-	log.Print("info", "paste-server started on %v", portStr)
+	log.Print("info", "paste-server started on :443")
 	maxMiB := int64(viper.GetInt("max-size"))
 	maxKiB := maxMiB * 1048576
 	log.Print("info", "using max-upload size: %dMB (%dKiB)", maxMiB, maxKiB)
@@ -285,45 +259,8 @@ func startServerTLS(ctx context.Context) error {
 
 	log.Print("info", "stopping server")
 
-	// Create context and shutdown server
-	ctxShutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
 	h.DisconnectDB()
-	err := srv.Shutdown(ctxShutdown)
-	if err != nil {
-		log.Print("fatal", "server shutdown failed: %v", err)
-	}
 
 	log.Print("info", "paste-server stopped")
-
-	if err == http.ErrServerClosed {
-		return nil
-	}
-
-	return err
-}
-
-func checkTLSKeyCrt(key, crt string) (bool, string) {
-	keyExists, err := utils.FileExists(key)
-	if err != nil {
-		e := fmt.Sprintf("error checking tls key file: %s", key)
-		return false, e
-	}
-	if !keyExists {
-		e := fmt.Sprintf("key file not found: %s", key)
-		return false, e
-	}
-
-	crtExists, err := utils.FileExists(crt)
-	if err != nil {
-		e := fmt.Sprintf("error checking tls crt file: %s", crt)
-		return false, e
-	}
-	if !crtExists {
-		e := fmt.Sprintf("crt file not found: %s", key)
-		return false, e
-	}
-
-	return true, ""
+	return nil
 }
