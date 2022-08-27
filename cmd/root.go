@@ -34,6 +34,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/h5law/paste-server/utils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -96,20 +97,8 @@ func initConfig() {
 
 	// If a config file is found, read it in.
 	config := viper.ConfigFileUsed()
-	exists, _ := fileExists(config)
+	exists, _ := utils.FileExists(config)
 	if err := viper.ReadInConfig(); err != nil && exists {
 		fmt.Fprintln(os.Stderr, "Error reading config file: ", err)
 	}
-}
-
-// Check path given exists
-func fileExists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	return false, err
 }
