@@ -109,12 +109,6 @@ func init() {
 		"d",
 		"example.com", "domain name for server (needed for TLS certs)",
 	)
-	startCmd.Flags().StringVarP(
-		&certDir,
-		"certs-dir",
-		"",
-		"/var/cache/paste-server/certs", "path to store certificates",
-	)
 
 	viper.BindPFlag("port", startCmd.Flags().Lookup("port"))
 	viper.BindPFlag("logfile", startCmd.Flags().Lookup("logfile"))
@@ -129,7 +123,6 @@ func init() {
 	viper.SetDefault("max-size", 1)
 	viper.SetDefault("tls", false)
 	viper.SetDefault("domain", "example.com")
-	viper.SetDefault("certs-dir", "/var/cache/paste-server/certs")
 }
 
 func prepareServer() {
@@ -234,11 +227,10 @@ func startServerTLS(ctx context.Context) error {
 	log.Print("info", "configuring TLS certificates")
 
 	domain := viper.GetString("domain")
-	certsDir := viper.GetString("certsDir")
 	certManager := autocert.Manager{
 		Prompt:     autocert.AcceptTOS,
 		HostPolicy: autocert.HostWhitelist(domain),
-		Cache:      autocert.DirCache(certsDir),
+		Cache:      autocert.DirCache("certs"),
 	}
 
 	log.Print("info", "starting https server")
