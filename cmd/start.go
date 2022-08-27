@@ -32,6 +32,7 @@ package cmd
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"os"
@@ -43,6 +44,7 @@ import (
 	log "github.com/h5law/paste-server/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 var (
@@ -50,6 +52,9 @@ var (
 	logFile    string
 	jsonFormat bool
 	maxUpload  int
+	secure     bool
+	domain     string
+	certDir    string
 
 	startCmd = &cobra.Command{
 		Use:   "start",
@@ -65,6 +70,68 @@ provided logs will be appended to that file (creating it if it doesn't exist).`,
 	}
 )
 
+func init() {
+	rootCmd.AddCommand(startCmd)
+
+	startCmd.Flags().IntVarP(
+		&port,
+		"port",
+		"p",
+		3000, "port to run the server on",
+	)
+	startCmd.Flags().StringVarP(
+		&logFile,
+		"logfile",
+		"l",
+		"", "path to log file",
+	)
+	startCmd.Flags().BoolVarP(
+		&jsonFormat,
+		"json",
+		"j",
+		false, "use json formatting for logs",
+	)
+	startCmd.Flags().IntVarP(
+		&maxUpload,
+		"max-size",
+		"",
+		1, "max request body size in MB",
+	)
+	startCmd.Flags().BoolVarP(
+		&secure,
+		"tls",
+		"t",
+		false, "use TLS (https) mode for server",
+	)
+	startCmd.Flags().StringVarP(
+		&domain,
+		"domain",
+		"d",
+		"example.com", "domain name for server (needed for TLS certs)",
+	)
+	startCmd.Flags().StringVarP(
+		&certDir,
+		"certs-dir",
+		"",
+		"/var/cache/paste-server/certs", "path to store certificates",
+	)
+
+	viper.BindPFlag("port", startCmd.Flags().Lookup("port"))
+	viper.BindPFlag("logfile", startCmd.Flags().Lookup("logfile"))
+	viper.BindPFlag("json", startCmd.Flags().Lookup("json"))
+	viper.BindPFlag("max-size", startCmd.Flags().Lookup("max-size"))
+	viper.BindPFlag("tls", startCmd.Flags().Lookup("tls"))
+	viper.BindPFlag("domain", startCmd.Flags().Lookup("domain"))
+	viper.BindPFlag("certs-dir", startCmd.Flags().Lookup("certs-dir"))
+	viper.SetDefault("port", 3000)
+	viper.SetDefault("logfile", "")
+	viper.SetDefault("json", false)
+	viper.SetDefault("max-size", 1)
+	viper.SetDefault("tls", false)
+	viper.SetDefault("domain", "example.com")
+	viper.SetDefault("certs-dir", "/var/cache/paste-server/certs")
+}
+
 func prepareServer() {
 	// Enable graceful shutdown on signal interrupts
 	c := make(chan os.Signal, 1)
@@ -79,8 +146,15 @@ func prepareServer() {
 		cancel()
 	}()
 
-	if err := startServer(ctx); err != nil {
-		log.Print("fatal", "failed to start server: %v", err)
+	secure := viper.GetBool("tls")
+	if secure {
+		if err := startServerTLS(ctx); err != nil {
+			log.Print("fatal", "failed to start server: %v", err)
+		}
+	} else {
+		if err := startServer(ctx); err != nil {
+			log.Print("fatal", "failed to start server: %v", err)
+		}
 	}
 }
 
@@ -145,40 +219,87 @@ func startServer(ctx context.Context) error {
 	return err
 }
 
-func init() {
-	rootCmd.AddCommand(startCmd)
+func startServerTLS(ctx context.Context) error {
+	port := viper.GetInt("port")
+	portStr := fmt.Sprintf(":%d", port)
 
-	startCmd.Flags().IntVarP(
-		&port,
-		"port",
-		"p",
-		3000, "port to run the server on",
-	)
-	startCmd.Flags().StringVarP(
-		&logFile,
-		"logfile",
-		"l",
-		"", "path to log file",
-	)
-	startCmd.Flags().BoolVarP(
-		&jsonFormat,
-		"json",
-		"j",
-		false, "use json formatting for logs",
-	)
-	startCmd.Flags().IntVarP(
-		&maxUpload,
-		"max-size",
-		"",
-		1, "max request body size in MB",
-	)
+	// Load connection URI for mongo from .env
+	uri := viper.GetString("uri")
+	if uri == "" {
+		log.Print("fatal", "`uri` not set in config file")
+	}
 
-	viper.BindPFlag("port", startCmd.Flags().Lookup("port"))
-	viper.BindPFlag("logfile", startCmd.Flags().Lookup("logfile"))
-	viper.BindPFlag("json", startCmd.Flags().Lookup("json"))
-	viper.BindPFlag("max-size", startCmd.Flags().Lookup("max-size"))
-	viper.SetDefault("port", 3000)
-	viper.SetDefault("logfile", "")
-	viper.SetDefault("json", false)
-	viper.SetDefault("max-size", 1)
+	h := api.NewHandler()
+
+	log.Print("info", "configuring TLS certificates")
+
+	domain := viper.GetString("domain")
+	certsDir := viper.GetString("certsDir")
+	certManager := autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: autocert.HostWhitelist(domain),
+		Cache:      autocert.DirCache(certsDir),
+	}
+
+	log.Print("info", "starting https server")
+
+	srv := &http.Server{
+		Addr:         portStr,
+		WriteTimeout: time.Second * 15,
+		ReadTimeout:  time.Second * 15,
+		IdleTimeout:  time.Second * 60,
+		Handler:      h,
+		TLSConfig: &tls.Config{
+			GetCertificate: certManager.GetCertificate,
+		},
+	}
+
+	// Start http server to redirect traffic to https
+	/*
+		go func() {
+			err := http.ListenAndServe(":8080", certManager.HTTPHandler(nil))
+			if err != nil && err != http.ErrServerClosed {
+				log.Print("fatal", "(http) listen error: %v", err)
+			}
+		}()
+	*/
+
+	// Start server in go routine so non-blocking
+	go func() {
+		err := srv.ListenAndServeTLS("", "")
+		if err != nil && err != http.ErrServerClosed {
+			log.Print("fatal", "(https) listen error: %v", err)
+		}
+	}()
+
+	log.Print("info", "paste-server started on %v", portStr)
+	maxMiB := int64(viper.GetInt("max-size"))
+	maxKiB := maxMiB * 1048576
+	log.Print("info", "using max-upload size: %dMB (%dKiB)", maxMiB, maxKiB)
+
+	// Connect to MongoDB and defer disconnection
+	h.ConnectDB(uri)
+
+	// Context has been cancelled - stop everything
+	<-ctx.Done()
+
+	log.Print("info", "stopping server")
+
+	// Create context and shutdown server
+	ctxShutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	h.DisconnectDB()
+	err := srv.Shutdown(ctxShutdown)
+	if err != nil {
+		log.Print("fatal", "server shutdown failed: %v", err)
+	}
+
+	log.Print("info", "paste-server stopped")
+
+	if err == http.ErrServerClosed {
+		return nil
+	}
+
+	return err
 }
