@@ -89,6 +89,16 @@ sudo systemctl start paste-server
 sudo systemctl enable paste-server
 ```
 
+## TLS
+
+When starting the server in TLS mode make sure that you use the `--domain/-d`
+and `--email/-e` flags to set the domain of your site and the email to use for
+the certificate or the server will not start properly.
+
+Currently HTTP GET requests are forwarded to HTTPS but POST, PUT and DELETE
+requests are not
+
+
 ## MongoDB
 
 When setting up the database there are a few things you must do, ensure you
@@ -130,4 +140,5 @@ body. Accepted fields are:
     - ~~`/api` will act as MongoDB interaction routes~~
     - `/{uuid}` will be a static site generator to view and interact with
 pastes
-- Add `-s` and `--secure` flags to `start` subcommand to use TLS
+- ~~Add `-s` and `--secure` flags to `start` subcommand to use TLS~~
+    - Make TLS config more detailed to support custom server like in http mode
