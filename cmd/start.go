@@ -62,7 +62,14 @@ var (
 the given port or default to using 3000.
 
 If no logfile is given logs will be directed to os.Stdout - if a logfile is
-provided logs will be appended to that file (creating it if it doesn't exist).`,
+provided logs will be appended to that file (creating it if it doesn't exist).
+
+To start a paste-server instance in HTTPS mode using TLS you must provide the
+-t or --tls flag and also the -d or --domain flag which is a string storing
+the domain name of your server and the -e or --email flag. These are for the
+LetsEncrypt certificate and are required for the certificates to be created.
+You will need ports :80 and :443 both open as the server will redirect certain
+HTTP traffic to HTTPS.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			prepareServer()
 		},
