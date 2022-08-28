@@ -70,6 +70,12 @@ the domain name of your server and the -e or --email flag. These are for the
 LetsEncrypt certificate and are required for the certificates to be created.
 You will need ports :80 and :443 both open as the server will redirect certain
 HTTP traffic to HTTPS.`,
+		PreRun: func(cmd *cobra.Command, args []string) {
+			if secure := viper.GetBool("tls"); secure {
+				cmd.MarkFlagRequired("domain")
+				cmd.MarkFlagRequired("email")
+			}
+		},
 		Run: func(cmd *cobra.Command, args []string) {
 			prepareServer()
 		},
