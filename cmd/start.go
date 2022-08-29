@@ -32,7 +32,6 @@ package cmd
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
@@ -249,69 +248,20 @@ func startServerTLS(ctx context.Context) error {
 	email := viper.GetString("email")
 	domain := viper.GetString("domain")
 
-	certmagic.DefaultACME.Agreed = true
-	certmagic.DefaultACME.Email = email
-	// TODO add check for APP_ENV == "test"
-	// then use certmagic.LetsEncryptStagingCA
+	// TODO add check for APP_ENV == "development" and use
+	// LetsEncryptStagingCA
 	certmagic.DefaultACME.CA = certmagic.LetsEncryptProductionCA
-
-	cfg := certmagic.NewDefault()
-	err := cfg.ManageSync(context.TODO(), []string{domain, "www." + domain})
-	if err != nil {
-		return err
-	}
-
-	// Create HTTP and HTTPS listeners
-	httpLn, err := net.Listen("tcp", ":80")
-	if err != nil {
-		return err
-	}
-	httpsLn, err := tls.Listen("tcp", ":443", cfg.TLSConfig())
-	if err != nil {
-		httpLn = nil
-		return err
-	}
-
-	defer func() {
-		httpLn.Close()
-		httpsLn.Close()
-	}()
-
-	// Create servers
-	httpSrv := &http.Server{
-		ReadHeaderTimeout: time.Second * 15,
-		WriteTimeout:      time.Second * 15,
-		ReadTimeout:       time.Second * 15,
-		IdleTimeout:       time.Second * 60,
-	}
-	if am, ok := cfg.Issuers[0].(*certmagic.ACMEIssuer); ok {
-		httpSrv.Handler = am.HTTPChallengeHandler(http.HandlerFunc(httpRedirectHandler))
-	}
-
-	httpsSrv := &http.Server{
-		ReadHeaderTimeout: time.Second * 15,
-		WriteTimeout:      time.Second * 15,
-		ReadTimeout:       time.Second * 15,
-		IdleTimeout:       time.Second * 60,
-		Handler:           h,
-	}
-
-	// Start servers in go routines so non-blocking
-	go func() {
-		err := httpSrv.Serve(httpLn)
-		if err != nil && err != http.ErrServerClosed {
-			log.Print("fatal", "(http) listen error: %v", err)
-		}
-	}()
-	log.Print("info", "paste-server started on :80 redirecting to :443")
+	certmagic.DefaultACME.Email = email
+	certmagic.DefaultACME.Agreed = true
 
 	go func() {
-		err := httpsSrv.Serve(httpsLn)
+		err := certmagic.HTTPS([]string{domain, "www." + domain}, h)
 		if err != nil && err != http.ErrServerClosed {
 			log.Print("fatal", "(https) listen error: %v", err)
+			os.Exit(1)
 		}
 	}()
-	log.Print("info", "paste-server started on :443")
+	log.Print("info", "paste-server started on :443 (:80 -> :443)")
 
 	maxMiB := int64(viper.GetInt("max-size"))
 	maxKiB := maxMiB * 1048576
@@ -325,30 +275,11 @@ func startServerTLS(ctx context.Context) error {
 
 	log.Print("info", "stopping server")
 
-	// Create context and shutdown server
-	ctxShutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
 	h.DisconnectDB()
-
-	// Shutdown both servers
-	err = httpSrv.Shutdown(ctxShutdown)
-	if err != nil {
-		log.Print("fatal", "(http) server shutdown failed: %v", err)
-	}
-
-	err = httpsSrv.Shutdown(ctxShutdown)
-	if err != nil {
-		log.Print("fatal", "(https) server shutdown failed: %v", err)
-	}
 
 	log.Print("info", "paste-server stopped")
 
-	if err == http.ErrServerClosed {
-		return nil
-	}
-
-	return err
+	return nil
 }
 
 func httpRedirectHandler(w http.ResponseWriter, r *http.Request) {
