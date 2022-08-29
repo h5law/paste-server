@@ -33,7 +33,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -280,26 +279,4 @@ func startServerTLS(ctx context.Context) error {
 	log.Print("info", "paste-server stopped")
 
 	return nil
-}
-
-func httpRedirectHandler(w http.ResponseWriter, r *http.Request) {
-	toURL := "https://"
-
-	// redirect to standard :443 so no need for port
-	requestHost := hostOnly(r.Host)
-
-	toURL += requestHost
-	toURL += r.URL.RequestURI()
-
-	w.Header().Set("Connection", "close")
-
-	http.Redirect(w, r, toURL, http.StatusMovedPermanently)
-}
-
-func hostOnly(hostport string) string {
-	host, _, err := net.SplitHostPort(hostport)
-	if err != nil {
-		return hostport // OK; probably had no port to begin with
-	}
-	return host
 }
