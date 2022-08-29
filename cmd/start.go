@@ -32,7 +32,9 @@ package cmd
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -247,20 +249,78 @@ func startServerTLS(ctx context.Context) error {
 	email := viper.GetString("email")
 	domain := viper.GetString("domain")
 
-	// TODO add check for APP_ENV == "development" and use
-	// LetsEncryptStagingCA
-	certmagic.DefaultACME.CA = certmagic.LetsEncryptProductionCA
-	certmagic.DefaultACME.Email = email
 	certmagic.DefaultACME.Agreed = true
+	certmagic.DefaultACME.Email = email
+	// TODO add check for APP_ENV == "test"
+	// then use certmagic.LetsEncryptStagingCA
+	certmagic.DefaultACME.CA = certmagic.LetsEncryptProductionCA
 
+	cfg := certmagic.NewDefault()
+	err := cfg.ManageSync(ctx, []string{domain, "www." + domain})
+	if err != nil {
+		return err
+	}
+
+	// Create HTTP and HTTPS listeners
+	httpLn, err := net.Listen("tcp", ":80")
+	if err != nil {
+		return err
+	}
+
+	tlsConfig := cfg.TLSConfig()
+	tlsConfig.NextProtos = append([]string{"h2", "http/1.1"}, tlsConfig.NextProtos...)
+
+	httpsLn, err := tls.Listen("tcp", ":443", tlsConfig)
+	if err != nil {
+		httpLn = nil
+		return err
+	}
+
+	defer func() {
+		httpLn.Close()
+		httpsLn.Close()
+	}()
+
+	// Create servers
+	httpSrv := &http.Server{
+		ReadHeaderTimeout: time.Second * 5,
+		ReadTimeout:       time.Second * 5,
+		WriteTimeout:      time.Second * 5,
+		IdleTimeout:       time.Second * 5,
+		BaseContext:       func(listener net.Listener) context.Context { return ctx },
+	}
+
+	if len(cfg.Issuers) > 0 {
+		if am, ok := cfg.Issuers[0].(*certmagic.ACMEIssuer); ok {
+			httpSrv.Handler = am.HTTPChallengeHandler(http.HandlerFunc(httpRedirectHandler))
+		}
+	}
+
+	httpsSrv := &http.Server{
+		ReadHeaderTimeout: time.Second * 10,
+		ReadTimeout:       time.Second * 30,
+		WriteTimeout:      time.Second * 2,
+		IdleTimeout:       time.Second * 5,
+		BaseContext:       func(listener net.Listener) context.Context { return ctx },
+		Handler:           h,
+	}
+
+	// Start servers in go routines so non-blocking
 	go func() {
-		err := certmagic.HTTPS([]string{domain, "www." + domain}, h)
+		log.Print("info", "paste-server started on :80 redirecting to :443")
+		err := httpSrv.Serve(httpLn)
 		if err != nil && err != http.ErrServerClosed {
-			log.Print("fatal", "(https) listen error: %v", err)
-			os.Exit(1)
+			log.Print("fatal", "(http) listen error: %v", err)
 		}
 	}()
-	log.Print("info", "paste-server started on :443 (:80 -> :443)")
+
+	go func() {
+		log.Print("info", "paste-server started on :443")
+		err := httpsSrv.Serve(httpsLn)
+		if err != nil && err != http.ErrServerClosed {
+			log.Print("fatal", "(https) listen error: %v", err)
+		}
+	}()
 
 	maxMiB := int64(viper.GetInt("max-size"))
 	maxKiB := maxMiB * 1048576
@@ -274,9 +334,50 @@ func startServerTLS(ctx context.Context) error {
 
 	log.Print("info", "stopping server")
 
+	// Create context and shutdown server
+	ctxShutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	h.DisconnectDB()
+
+	// Shutdown both servers
+	err = httpSrv.Shutdown(ctxShutdown)
+	if err != nil {
+		log.Print("fatal", "(http) server shutdown failed: %v", err)
+	}
+
+	err = httpsSrv.Shutdown(ctxShutdown)
+	if err != nil {
+		log.Print("fatal", "(https) server shutdown failed: %v", err)
+	}
 
 	log.Print("info", "paste-server stopped")
 
-	return nil
+	if err == http.ErrServerClosed {
+		return nil
+	}
+
+	return err
+}
+
+func httpRedirectHandler(w http.ResponseWriter, r *http.Request) {
+	toURL := "https://"
+
+	// redirect to standard :443 so no need for port
+	requestHost := hostOnly(r.Host)
+
+	toURL += requestHost
+	toURL += r.URL.RequestURI()
+
+	w.Header().Set("Connection", "close")
+
+	http.Redirect(w, r, toURL, http.StatusMovedPermanently)
+}
+
+func hostOnly(hostport string) string {
+	host, _, err := net.SplitHostPort(hostport)
+	if err != nil {
+		return hostport // OK; probably had no port to begin with
+	}
+	return host
 }
