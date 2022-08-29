@@ -96,8 +96,12 @@ and `--email/-e` flags to set the domain of your site and the email to use for
 the certificate or the server will not start properly.
 
 Currently HTTP GET requests are forwarded to HTTPS but POST, PUT and DELETE
-requests are not
+requests are not.
 
+I used the definition of the [HTTPS function](https://github.com/caddyserver/certmagic/blob/76f61c2947a20d86ca37669dbdc0ed7a96fc6c5f/certmagic.go#L68)
+from caddyserver's certmagic github documentation to implement the TLS server
+with the ability to gracefully shutdown the server using the same context as
+with the http server which was a great help!
 
 ## MongoDB
 
