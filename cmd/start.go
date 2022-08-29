@@ -364,3 +364,11 @@ func httpRedirectHandler(w http.ResponseWriter, r *http.Request) {
 
 	http.Redirect(w, r, toURL, http.StatusMovedPermanently)
 }
+
+func hostOnly(hostport string) string {
+	host, _, err := net.SplitHostPort(hostport)
+	if err != nil {
+		return hostport // OK; probably had no port to begin with
+	}
+	return host
+}
