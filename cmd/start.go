@@ -32,7 +32,9 @@ package cmd
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -185,11 +187,12 @@ func startServer(ctx context.Context) error {
 	log.Print("info", "starting server")
 
 	srv := &http.Server{
-		Addr:         portStr,
-		WriteTimeout: time.Second * 15,
-		ReadTimeout:  time.Second * 15,
-		IdleTimeout:  time.Second * 60,
-		Handler:      h,
+		Addr:              portStr,
+		ReadHeaderTimeout: time.Second * 15,
+		WriteTimeout:      time.Second * 15,
+		ReadTimeout:       time.Second * 15,
+		IdleTimeout:       time.Second * 60,
+		Handler:           h,
 	}
 
 	// Start server in go routine so non-blocking
@@ -231,8 +234,6 @@ func startServer(ctx context.Context) error {
 	return err
 }
 
-// Very simple with certmagic
-// TODO add srv like in normal http for contexts etc
 func startServerTLS(ctx context.Context) error {
 	// Load connection URI for mongo from .env
 	uri := viper.GetString("uri")
@@ -244,22 +245,74 @@ func startServerTLS(ctx context.Context) error {
 
 	log.Print("info", "starting https server")
 
-	// Start server in go routine so non-blocking
+	// Create TLS config
+	email := viper.GetString("email")
+	domain := viper.GetString("domain")
+
+	certmagic.DefaultACME.Agreed = true
+	certmagic.DefaultACME.Email = email
+	// TODO add check for APP_ENV == "test"
+	// then use certmagic.LetsEncryptStagingCA
+	certmagic.DefaultACME.CA = certmagic.LetsEncryptProductionCA
+
+	cfg := certmagic.NewDefault()
+	err := cfg.ManageSync(context.TODO(), []string{domain, "www." + domain})
+	if err != nil {
+		return err
+	}
+
+	// Create HTTP and HTTPS listeners
+	httpLn, err := net.Listen("tcp", ":80")
+	if err != nil {
+		return err
+	}
+	httpsLn, err := tls.Listen("tcp", ":443", cfg.TLSConfig())
+	if err != nil {
+		httpLn = nil
+		return err
+	}
+
+	defer func() {
+		httpLn.Close()
+		httpsLn.Close()
+	}()
+
+	// Create servers
+	httpSrv := &http.Server{
+		ReadHeaderTimeout: time.Second * 15,
+		WriteTimeout:      time.Second * 15,
+		ReadTimeout:       time.Second * 15,
+		IdleTimeout:       time.Second * 60,
+	}
+	if am, ok := cfg.Issuers[0].(*certmagic.ACMEIssuer); ok {
+		httpSrv.Handler = am.HTTPChallengeHandler(http.HandlerFunc(httpRedirectHandler))
+	}
+
+	httpsSrv := &http.Server{
+		ReadHeaderTimeout: time.Second * 15,
+		WriteTimeout:      time.Second * 15,
+		ReadTimeout:       time.Second * 15,
+		IdleTimeout:       time.Second * 60,
+		Handler:           h,
+	}
+
+	// Start servers in go routines so non-blocking
 	go func() {
-		email := viper.GetString("email")
-		domain := viper.GetString("domain")
+		err := httpSrv.Serve(httpLn)
+		if err != nil && err != http.ErrServerClosed {
+			log.Print("fatal", "(http) listen error: %v", err)
+		}
+		log.Print("info", "paste-server started on :80 redirecting to :443")
+	}()
 
-		certmagic.DefaultACME.Agreed = true
-		certmagic.DefaultACME.Email = email
-		certmagic.DefaultACME.CA = certmagic.LetsEncryptProductionCA
-
-		err := certmagic.HTTPS([]string{domain, "www." + domain}, h)
+	go func() {
+		err := httpsSrv.Serve(httpsLn)
 		if err != nil && err != http.ErrServerClosed {
 			log.Print("fatal", "(https) listen error: %v", err)
 		}
+		log.Print("info", "paste-server started on :443")
 	}()
 
-	log.Print("info", "paste-server started on :443")
 	maxMiB := int64(viper.GetInt("max-size"))
 	maxKiB := maxMiB * 1048576
 	log.Print("info", "using max-upload size: %dMB (%dKiB)", maxMiB, maxKiB)
@@ -272,8 +325,42 @@ func startServerTLS(ctx context.Context) error {
 
 	log.Print("info", "stopping server")
 
+	// Create context and shutdown server
+	ctxShutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	h.DisconnectDB()
 
+	// Shutdown both servers
+	err = httpSrv.Shutdown(ctxShutdown)
+	if err != nil {
+		log.Print("fatal", "(http) server shutdown failed: %v", err)
+	}
+
+	err = httpsSrv.Shutdown(ctxShutdown)
+	if err != nil {
+		log.Print("fatal", "(https) server shutdown failed: %v", err)
+	}
+
 	log.Print("info", "paste-server stopped")
-	return nil
+
+	if err == http.ErrServerClosed {
+		return nil
+	}
+
+	return err
+}
+
+func httpRedirectHandler(w http.ResponseWriter, r *http.Request) {
+	toURL := "https://"
+
+	// redirect to standard :443 so no need for port
+	requestHost := hostOnly(r.Host)
+
+	toURL += requestHost
+	toURL += r.URL.RequestURI()
+
+	w.Header().Set("Connection", "close")
+
+	http.Redirect(w, r, toURL, http.StatusMovedPermanently)
 }
