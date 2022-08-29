@@ -188,10 +188,11 @@ func startServer(ctx context.Context) error {
 
 	srv := &http.Server{
 		Addr:              portStr,
-		ReadHeaderTimeout: time.Second * 15,
-		WriteTimeout:      time.Second * 15,
-		ReadTimeout:       time.Second * 15,
-		IdleTimeout:       time.Second * 60,
+		ReadHeaderTimeout: time.Second * 5,
+		ReadTimeout:       time.Second * 5,
+		WriteTimeout:      time.Second * 5,
+		IdleTimeout:       time.Second * 5,
+		BaseContext:       func(listener net.Listener) context.Context { return ctx },
 		Handler:           h,
 	}
 
