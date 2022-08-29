@@ -302,16 +302,16 @@ func startServerTLS(ctx context.Context) error {
 		if err != nil && err != http.ErrServerClosed {
 			log.Print("fatal", "(http) listen error: %v", err)
 		}
-		log.Print("info", "paste-server started on :80 redirecting to :443")
 	}()
+	log.Print("info", "paste-server started on :80 redirecting to :443")
 
 	go func() {
 		err := httpsSrv.Serve(httpsLn)
 		if err != nil && err != http.ErrServerClosed {
 			log.Print("fatal", "(https) listen error: %v", err)
 		}
-		log.Print("info", "paste-server started on :443")
 	}()
+	log.Print("info", "paste-server started on :443")
 
 	maxMiB := int64(viper.GetInt("max-size"))
 	maxKiB := maxMiB * 1048576
