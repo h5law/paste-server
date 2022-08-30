@@ -268,6 +268,8 @@ func startServerTLS(ctx context.Context) error {
 		return err
 	}
 
+	defer httpLn.Close()
+
 	tlsConfig := cfg.TLSConfig()
 	tlsConfig.NextProtos = append([]string{"h2", "http/1.1"}, tlsConfig.NextProtos...)
 
@@ -276,6 +278,8 @@ func startServerTLS(ctx context.Context) error {
 		httpLn = nil
 		return err
 	}
+
+	defer httpsLn.Close()
 
 	defer func() {
 		httpLn.Close()
