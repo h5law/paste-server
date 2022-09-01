@@ -60,6 +60,6 @@ var (
 
 func init() {
 	rootCmd.AddCommand(versionCmd)
-	VersionVerbose = "print-server (temporary pastebin http server) v1.0-BETA"
-	VersionShort = "v1.0-BETA"
+	VersionShort = "v1.0"
+	VersionVerbose = "print-server (temporary pastebin http server) " + VersionShort
 }
