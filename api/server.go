@@ -600,10 +600,12 @@ func (h *Handler) getPasteHTML() http.HandlerFunc {
 			return
 		}
 
-		fmt.Fprintf(w, "uuid:      \t%s\n", uuidStr)
-		fmt.Fprintf(w, "filetype:  \t%s\n", paste.FileType)
-		fmt.Fprintf(w, "expiresAt: \t%s\n", paste.ExpiresAt.Time().String())
-		fmt.Fprintf(w, "\n")
+		if raw := r.URL.Query().Get("raw"); raw != "true" {
+			fmt.Fprintf(w, "uuid:      \t%s\n", uuidStr)
+			fmt.Fprintf(w, "filetype:  \t%s\n", paste.FileType)
+			fmt.Fprintf(w, "expiresAt: \t%s\n", paste.ExpiresAt.Time().String())
+			fmt.Fprintf(w, "\n")
+		}
 		for _, v := range paste.Content {
 			fmt.Fprintf(w, "%s\n", v)
 		}
