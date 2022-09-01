@@ -31,9 +31,9 @@ git clone https://github.com/h5law/paste-server
 cd paste-server
 ```
 
-Then create a config file (by default paste-server will look for it at
-`$HOME/.paste.yaml`) containing the MongoDB connection URI for the database you
-have set up
+Then create a [config](#Config) file (by default paste-server will look for it
+at `$HOME/.paste.yaml`) containing the MongoDB connection URI for the database
+you have set up
 ```
 echo "uri: <your connection URI here>" >> ~/.paste.yaml
 ```
@@ -55,6 +55,24 @@ run the server
 ```
 
 To set up the server to run as a daemon with systemd see [here](#Daemon)
+
+## Config
+
+The config file is by default `$HOME/.paste.yaml` and is the same file used
+both for a paste-server instance and the [paste-cli](https://github.com/h5law/paste-cli)
+tool. It can be pointed to any YAML file using the `-c/--config` flag.
+
+The config file MUST contain the `uri` variable - the MongoDB connection string
+but can also contain `app_env` a string of either `development` or `test` which
+will make the instance use the `LetsEncryptStagingCA` if present otherwise it
+will use the `LetsEncryptProductionCA` if `app_env` is not set or set to
+anything other than `test` or `development` when using the `-t/--tls` flag.
+
+```
+uri: <MongoDB connection uri string>
+app_env: <development/test/(production -- optional not needed)>
+url: <URL for paste-cli to use if not using the hosted instance at https://pastes.ch>
+```
 
 ## Daemon
 
@@ -138,11 +156,43 @@ body. Accepted fields are:
 }
 ```
 
+## URLS + Requests
+
+The paste-server instance will expose the following urls:
+ - `/api/new`
+ - `/api/{uuid}`
+ - `/{uuid}`
+
+The `/api` routes are used by the [paste-cli](https://github.com/h5law/paste-cli)
+tool to preform CRUD operations and can be used to send HTTP requests to
+interact with the instance without the paste-cli tool.
+
+- `POST /api/new`
+  - Requires JSON body containing at least `content` field of an array of
+strings, a file split at new-lines
+  - Optionally can include `filetype`, and `expiresIn` fields which default to
+`plaintext` and `14` respectively
+  - Returns a JSON object containing the `accessKey`, `expiresAt`, and `uuid`
+fields
+- `GET /api/{uuid}`
+  - Returns JSON object containing the `content`, `filetype` and `expiresAt`
+fields
+- `UPDATE /api/{uuid}`
+  - Requires JSON body containing any changes to `content`, `filetype`, or a
+new `expiresIn` value as well as the `accessKey` field
+  - By default the paste will be updated to expire in another 14 days after the
+update so use `expriesIn` with any changes made to ensure a longer or shorter
+life
+- `DELETE /api/{uuid}`
+  - Requires the JSON body containing only the `accessKey` field
+  - Returns a message confirming the pastes deletion
+
+The `/{uuid}` route is a currently (see [TODO](#TODO)) a simple plaintext site
+that displays the result of `GET /api/{uuid}`. However using the query `raw` in
+the URL can have the page display only the content of the paste without the
+`filetype` and `expiresAt` fields - `/{uuid}?raw=true`
+
 ## TODO
 
-- Seperate route handler into 2 sections `/api` and `/{uuid}`
-    - ~~`/api` will act as MongoDB interaction routes~~
-    - `/{uuid}` will be a static site generator to view and interact with
-pastes
-- ~~Add `-s` and `--secure` flags to `start` subcommand to use TLS~~
-    - Make TLS config more detailed to support custom server like in http mode
+- Add front-end site + homepage
+- Add ability to create/update/delete pastes from website
