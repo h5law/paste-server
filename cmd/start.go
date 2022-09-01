@@ -252,9 +252,12 @@ func startServerTLS(ctx context.Context) error {
 
 	certmagic.DefaultACME.Agreed = true
 	certmagic.DefaultACME.Email = email
-	// TODO add check for APP_ENV == "test"
-	// then use certmagic.LetsEncryptStagingCA
-	certmagic.DefaultACME.CA = certmagic.LetsEncryptProductionCA
+	env := viper.GetString("app_env")
+	if env == "development" || env == "test" {
+		certmagic.DefaultACME.CA = certmagic.LetsEncryptStagingCA
+	} else {
+		certmagic.DefaultACME.CA = certmagic.LetsEncryptProductionCA
+	}
 
 	cfg := certmagic.NewDefault()
 	err := cfg.ManageSync(ctx, []string{domain, "www." + domain})
