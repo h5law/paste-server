@@ -38,6 +38,8 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -57,6 +59,45 @@ const (
 	dbName   string = "pastes"
 	collName string = "files"
 )
+
+/* Serve SPA on base url and /{uuid}
+use spaHandler struct which implements the http.Handler interface to
+respond to HTTP requests - the path to the static directory and the path
+of the index file in the directory are used to serve the SPA
+*/
+type spaHandler struct {
+	staticPath string
+	indexPath  string
+}
+
+func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// absolute path prevents directory traversal
+	path, err := filepath.Abs(r.URL.Path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// use staticPath as prefix
+	path = filepath.Join(h.staticPath, path)
+
+	// check if file exists at path
+	_, err = os.Stat(path)
+	if os.IsNotExist(err) {
+		http.ServeFile(w, r, filepath.Join(h.staticPath, h.indexPath))
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.FileServer(http.Dir(h.staticPath)).ServeHTTP(w, r)
+}
+
+/* Handler for api and mongodb connections that stores both the
+mux.Router and the mongodb client instance
+*/
 
 type Handler struct {
 	*mux.Router
@@ -88,7 +129,11 @@ func (h *Handler) routes() {
 	h.HandleFunc("/api/{uuid}", h.getPaste()).Methods("GET")
 	h.HandleFunc("/api/{uuid}", h.updatePaste()).Methods("PUT")
 	h.HandleFunc("/api/{uuid}", h.deletePaste()).Methods("DELETE")
-	h.HandleFunc("/{uuid}", h.getPasteHTML()).Methods("GET")
+	h.HandleFunc("/{uuid}/raw", h.getRawPasteHTML()).Methods("GET")
+
+	if noSpa := viper.GetBool("no-frontend"); noSpa {
+		h.HandleFunc("/{uuid}", h.getPasteHTML()).Methods("GET")
+	}
 }
 
 func NewHandler() *Handler {
@@ -97,6 +142,12 @@ func NewHandler() *Handler {
 	}
 
 	h.routes()
+
+	if noSpa := viper.GetBool("no-frontend"); noSpa == false {
+		spa := spaHandler{staticPath: "build", indexPath: "index.html"}
+		h.PathPrefix("/").Handler(spa)
+	}
+
 	return h
 }
 
@@ -554,7 +605,7 @@ func (h *Handler) deletePaste() http.HandlerFunc {
 }
 
 /* GET /{uuid}
-Return the raw content of GET /api/{uuid} in an HTML file
+Return a simple plaintext site of GET /api/{uuid} with content and other fields
 */
 func (h *Handler) getPasteHTML() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -600,12 +651,66 @@ func (h *Handler) getPasteHTML() http.HandlerFunc {
 			return
 		}
 
-		if raw := r.URL.Query().Get("raw"); raw != "true" {
-			fmt.Fprintf(w, "uuid:      \t%s\n", uuidStr)
-			fmt.Fprintf(w, "filetype:  \t%s\n", paste.FileType)
-			fmt.Fprintf(w, "expiresAt: \t%s\n", paste.ExpiresAt.Time().String())
-			fmt.Fprintf(w, "\n")
+		w.Header().Set("Content-Type", "text/plain; charset=UTF-8")
+
+		fmt.Fprintf(w, "UUID:       \t%s\n", uuidStr)
+		fmt.Fprintf(w, "Filetype:   \t%s\n", paste.FileType)
+		fmt.Fprintf(w, "Expires At: \t%s\n", paste.ExpiresAt.Time().String())
+		fmt.Fprintln(w)
+		for _, v := range paste.Content {
+			fmt.Fprintf(w, "%s\n", v)
 		}
+	}
+}
+
+/* GET /{uuid}/raw
+Return the raw content of GET /api/{uuid} in an HTML file
+*/
+func (h *Handler) getRawPasteHTML() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		defer func() {
+			log.Print("info", "%s %s [%v]",
+				r.Method,
+				r.URL.Path,
+				time.Since(start),
+			)
+		}()
+
+		uuidStr, _ := mux.Vars(r)["uuid"]
+
+		// Fetch document matching UUID from database
+		coll := h.Client.Database(dbName).Collection(collName)
+		var result bson.M
+		filter := bson.M{"uuid": uuidStr}
+		project := bson.M{
+			"_id":       0,
+			"accessKey": 0,
+			"uuid":      0,
+		}
+
+		err := coll.FindOne(
+			context.TODO(),
+			filter,
+			options.FindOne().SetProjection(project),
+		).Decode(&result)
+
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				http.Error(w, "No document found with that UUID", http.StatusBadRequest)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		paste, err := bsonToPaste(result)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/plain; charset=UTF-8")
 		for _, v := range paste.Content {
 			fmt.Fprintf(w, "%s\n", v)
 		}
