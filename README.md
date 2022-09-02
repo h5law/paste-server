@@ -194,5 +194,7 @@ the URL can have the page display only the content of the paste without the
 
 ## TODO
 
+- Add subcommand to build preact SPA
 - Add front-end site + homepage
 - Add ability to create/update/delete pastes from website
+- Add flag to disable SPA and use only api+simple plaintext sites
