@@ -44,6 +44,7 @@ import (
 	"github.com/caddyserver/certmagic"
 	"github.com/h5law/paste-server/api"
 	log "github.com/h5law/paste-server/logger"
+	"github.com/rs/cors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -193,6 +194,14 @@ func startServer(ctx context.Context) error {
 
 	h := api.NewHandler()
 
+	// Set up CORS
+	c := cors.New(cors.Options{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE"},
+	})
+
+	handler := c.Handler(h)
+
 	log.Print("info", "starting server")
 
 	srv := &http.Server{
@@ -202,7 +211,7 @@ func startServer(ctx context.Context) error {
 		WriteTimeout:      time.Second * 5,
 		IdleTimeout:       time.Second * 5,
 		BaseContext:       func(listener net.Listener) context.Context { return ctx },
-		Handler:           h,
+		Handler:           handler,
 	}
 
 	// Start server in go routine so non-blocking
@@ -252,6 +261,14 @@ func startServerTLS(ctx context.Context) error {
 	}
 
 	h := api.NewHandler()
+
+	// Set up CORS
+	c := cors.New(cors.Options{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE"},
+	})
+
+	handler := c.Handler(h)
 
 	log.Print("info", "starting https server")
 
@@ -319,7 +336,7 @@ func startServerTLS(ctx context.Context) error {
 		WriteTimeout:      time.Second * 2,
 		IdleTimeout:       time.Second * 5,
 		BaseContext:       func(listener net.Listener) context.Context { return ctx },
-		Handler:           h,
+		Handler:           handler,
 	}
 
 	// Start servers in go routines so non-blocking
