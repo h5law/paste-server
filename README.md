@@ -189,14 +189,15 @@ life
   - Requires the JSON body containing only the `accessKey` field
   - Returns a message confirming the pastes deletion
 
-The `/{uuid}` route when using the `--no-frontend` flag of the start command
-disables the preact frontend SPA to interact with the site and instead will
-make use of a simple plaintext site that neatly prints the contents of
-`GET /api/{uuid}` and all its fields. `/{uuid}/raw` does the same but only
-shows the content field - this works whether `--no-frontent` is enabled or not.
+The `/{uuid}` route (when no directory for a built frontend SPA has been
+provided with the `--spa-dir` flag of the start command) will make use of a
+simple plaintext site that neatly prints the contents of `GET /api/{uuid}` and
+all its fields. `/{uuid}/raw` does the same but only shows the content field -
+this works whether `--spa-dir` is given or not.
 
 **THIS IS STILL A WORK IN PROGRESS** By default however `/` will serve the
-Preact SPA built in the `./build` directory and will allow for new pastes to be
+Preact [SPA](https://github.com/h5law/paste-site) built in the  directory
+given by the `--spa-dir` flag and will allow for new pastes to be
 created through the homepage of the site. It also handles the `/{uuid}` route
 and allows for updates and deletes to be made through the front end site. To
 see more about the Preact SPA check out [this repo](https://github.com/h5law/paste-site)
@@ -205,5 +206,4 @@ see more about the Preact SPA check out [this repo](https://github.com/h5law/pas
 
 - Add subcommand to build preact SPA
 - Add front-end site + homepage
-- Add ability to create/update/delete pastes from website
-- ~~Add flag to disable SPA and use only api+simple plaintext sites~~
+- Add ability to ~~create/~~update/delete pastes from website
