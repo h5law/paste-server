@@ -38,6 +38,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -47,6 +48,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	log "github.com/h5law/paste-server/logger"
+	"github.com/h5law/paste-server/utils"
 	"github.com/spf13/viper"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -70,7 +72,33 @@ type spaHandler struct {
 }
 
 func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, filepath.Join(h.staticPath, h.indexPath))
+	// get the absolute path to prevent directory traversal
+	path, err := filepath.Abs(r.URL.Path)
+	if err != nil {
+		// if we failed to get the absolute path respond with a 400 bad request
+		// and stop
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// prepend the path with the path to the static directory
+	path = filepath.Join(h.staticPath, path)
+
+	// check whether a file exists at the given path
+	_, err = os.Stat(path)
+	if os.IsNotExist(err) {
+		// file does not exist, serve index.html
+		http.ServeFile(w, r, filepath.Join(h.staticPath, h.indexPath))
+		return
+	} else if err != nil {
+		// if we got an error (that wasn't that the file doesn't exist) stating the
+		// file, return a 500 internal server error and stop
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// otherwise, use http.FileServer to serve the static dir
+	http.FileServer(http.Dir(h.staticPath)).ServeHTTP(w, r)
 }
 
 /* Handler for api and mongodb connections that stores both the
@@ -109,7 +137,7 @@ func (h *Handler) routes() {
 	h.HandleFunc("/api/{uuid}", h.deletePaste()).Methods("DELETE")
 	h.HandleFunc("/{uuid}/raw", h.getRawPasteHTML()).Methods("GET")
 
-	if noSpa := viper.GetBool("no-frontend"); noSpa {
+	if spaDir := viper.GetString("spa-dir"); spaDir == "" {
 		h.HandleFunc("/{uuid}", h.getPasteHTML()).Methods("GET")
 	}
 }
@@ -121,8 +149,18 @@ func NewHandler() *Handler {
 
 	h.routes()
 
-	if noSpa := viper.GetBool("no-frontend"); noSpa == false {
-		spa := spaHandler{staticPath: "build", indexPath: "index.html"}
+	if spaDir := viper.GetString("spa-dir"); spaDir != "" {
+		exists, err := utils.FileExists(spaDir)
+		if err != nil {
+			log.Print("error", "%v", err.Error())
+			return h
+		}
+		if !exists {
+			log.Print("error", "Build directory does not exist: %s", spaDir)
+			return h
+		}
+		spath, _ := filepath.Abs(spaDir)
+		spa := spaHandler{staticPath: spath, indexPath: "index.html"}
 		h.PathPrefix("/").Handler(spa)
 	}
 
