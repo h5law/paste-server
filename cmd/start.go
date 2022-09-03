@@ -57,7 +57,7 @@ var (
 	secure     bool
 	domain     string
 	email      string
-	noSpa      bool
+	spaDir     string
 
 	startCmd = &cobra.Command{
 		Use:   "start",
@@ -131,11 +131,11 @@ func init() {
 		"e",
 		"admin@example.com", "email to use to TLS configuration",
 	)
-	startCmd.Flags().BoolVarP(
-		&noSpa,
-		"no-frontend",
+	startCmd.Flags().StringVarP(
+		&spaDir,
+		"spa-dir",
 		"",
-		false, "do NOT use the preact frontend - instead use simple plaintext",
+		"", "build directory of the paste-site Preact SPA to use for frontend",
 	)
 
 	viper.BindPFlag("port", startCmd.Flags().Lookup("port"))
@@ -145,7 +145,7 @@ func init() {
 	viper.BindPFlag("tls", startCmd.Flags().Lookup("tls"))
 	viper.BindPFlag("domain", startCmd.Flags().Lookup("domain"))
 	viper.BindPFlag("email", startCmd.Flags().Lookup("email"))
-	viper.BindPFlag("no-frontend", startCmd.Flags().Lookup("no-frontend"))
+	viper.BindPFlag("spa-dir", startCmd.Flags().Lookup("spa-dir"))
 	viper.SetDefault("port", 3000)
 	viper.SetDefault("logfile", "")
 	viper.SetDefault("json", false)
@@ -153,7 +153,7 @@ func init() {
 	viper.SetDefault("tls", false)
 	viper.SetDefault("domain", "example.com")
 	viper.SetDefault("email", "admin@example.com")
-	viper.SetDefault("no-frontend", false)
+	viper.SetDefault("spa-dir", "")
 }
 
 func prepareServer() {
