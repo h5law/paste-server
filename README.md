@@ -107,6 +107,39 @@ sudo systemctl start paste-server
 sudo systemctl enable paste-server
 ```
 
+## Frontend
+
+For those users who don't want to use the [paste cli tool](https://github.com/h5law/paste-cli)
+you can build a Preact SPA and have the paste-server serve this prebuilt file
+on the routes `/` and `/{uuid}` by specifying the static file directory for the
+built assets.
+
+Firstly clone the paste-site [repo](https://github.com/h5law/paste-site):
+```
+git clone https://github.com/h5law/paste-site
+```
+
+**This requires NodeJS version 16.16.0 or higher**. Then go into the directory
+install all its dependencies and build the static assets:
+```
+cd paste-site
+npm i
+npm run build
+```
+
+Now it is important to remember to use the `--spa-dir` flag when running the
+paste-server or no frontend will be provided on `/` and `/{uuid}` will give a
+simple plaintext file. For example:
+```
+paste-server start -v --spa-dir="/var/www/paste-site/build" --config="/etc/pastes.yaml"
+```
+
+And if running as a daemon add the `--spa-dir` flag to the Exec line:
+```
+ExecStart=/usr/local/bin/paste-server start -v -p 80 -l /var/log/paste-server --spa-dir <PATH TO DIR> -c /etc/paste.yaml
+
+```
+
 ## TLS
 
 When starting the server in TLS mode make sure that you use the `--domain/-d`
