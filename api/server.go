@@ -38,7 +38,6 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -71,28 +70,7 @@ type spaHandler struct {
 }
 
 func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// absolute path prevents directory traversal
-	path, err := filepath.Abs(r.URL.Path)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// use staticPath as prefix
-	path = filepath.Join(h.staticPath, path)
-
-	// check if file exists at path
-	_, err = os.Stat(path)
-	if os.IsNotExist(err) {
-		http.ServeFile(w, r, filepath.Join(h.staticPath, h.indexPath))
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	http.FileServer(http.Dir(h.staticPath)).ServeHTTP(w, r)
+	http.ServeFile(w, r, filepath.Join(h.staticPath, h.indexPath))
 }
 
 /* Handler for api and mongodb connections that stores both the
@@ -600,6 +578,7 @@ func (h *Handler) deletePaste() http.HandlerFunc {
 			http.Error(w, "Error matching and deleting document", http.StatusInternalServerError)
 			return
 		}
+
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
