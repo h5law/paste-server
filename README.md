@@ -228,15 +228,9 @@ simple plaintext site that neatly prints the contents of `GET /api/{uuid}` and
 all its fields. `/{uuid}/raw` does the same but only shows the content field -
 this works whether `--spa-dir` is given or not.
 
-**THIS IS STILL A WORK IN PROGRESS** By default however `/` will serve the
-Preact [SPA](https://github.com/h5law/paste-site) built in the  directory
-given by the `--spa-dir` flag and will allow for new pastes to be
-created through the homepage of the site. It also handles the `/{uuid}` route
-and allows for updates and deletes to be made through the front end site. To
-see more about the Preact SPA check out [this repo](https://github.com/h5law/paste-site)
-
-## TODO
-
-- Add subcommand to build preact SPA
-- Add front-end site + homepage
-- Add ability to ~~create/~~update/delete pastes from website
+With the `--spa-dir` flag set `/` will serve the Preact
+[SPA](https://github.com/h5law/paste-site) built in the directory given by the
+`--spa-dir` flag and will allow for new pastes to be created through the
+homepage of the site. It also handles the `/{uuid}` route and allows for
+updates and deletes to be made through the front end site. To see more about
+the Preact SPA check out [this repo](https://github.com/h5law/paste-site)
