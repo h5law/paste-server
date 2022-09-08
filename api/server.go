@@ -239,7 +239,7 @@ func (p *Paste) EditPaste(src *PasteBody) error {
 	if src.FileType != "" && src.FileType == p.FileType {
 		return errors.New("No changes made to filetype field")
 	}
-	if src.ExpiresIn != 0 && src.ExpiresIn <= 0 || src.ExpiresIn >= 30 {
+	if src.ExpiresIn != 0 && src.ExpiresIn <= 0 || src.ExpiresIn > 30 {
 		return errors.New("Expiration time outside valid range")
 	}
 
